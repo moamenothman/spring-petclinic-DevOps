@@ -42,17 +42,22 @@ pipeline {
                       -w /workspace \
                       maven:3.9.16-eclipse-temurin-17 \
                       bash -lc '
+                        trap '\''if [ -d /workspace/target ]; then chown -R 105:108 /workspace/target || true; fi'\'' EXIT
+
                         set -e
                         apt-get update
                         apt-get install -y docker.io curl
+
                         mkdir -p /usr/local/lib/docker/cli-plugins
                         curl -fsSL \
                           https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64 \
                           -o /usr/local/lib/docker/cli-plugins/docker-compose
                         chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
                         java -version
                         docker version
                         docker compose version
+
                         chmod +x ./mvnw
                         ./mvnw -B verify
                       '
@@ -64,8 +69,10 @@ pipeline {
             steps {
                 sh '''
                     test -f "$WORKSPACE/$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar"
+
                     rm -rf image-context
                     mkdir -p image-context
+
                     cp Docker/Dockerfile image-context/Dockerfile
                     cp "$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar" image-context/app.jar
                 '''
@@ -127,6 +134,7 @@ pipeline {
                 rm -rf image-context
                 rm -rf .docker-config
             '''
+
             echo 'Pipeline finished. Review the stage results above.'
         }
 
