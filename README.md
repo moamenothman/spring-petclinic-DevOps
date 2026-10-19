@@ -1,8 +1,8 @@
 # Spring PetClinic — Cloud-Native DevOps Project
 
-A containerized Spring Boot application deployed on Kubernetes, with Jenkins-based CI/CD, persistent MySQL storage, declarative infrastructure, and Kubernetes security configuration.
+A containerized Spring Boot application deployed on Kubernetes, with Jenkins-based CI/CD, persistent MySQL storage, declarative infrastructure, Kubernetes security configuration, and GitOps-based application reconciliation with Argo CD.
 
-This project demonstrates practical DevOps workflows for building, packaging, deploying, and operating a Java application using Docker, Jenkins, and Kubernetes.
+This project demonstrates practical DevOps workflows for building, packaging, deploying, and operating a Java application using Docker, Jenkins, Kubernetes, and Argo CD.
 
 **Repository:** [spring-petclinic-DevOps](https://github.com/moamenothman/spring-petclinic-DevOps)
 
@@ -17,13 +17,16 @@ This project demonstrates practical DevOps workflows for building, packaging, de
 - [Kubernetes Deployment](#kubernetes-deployment)
 - [Application Configuration](#application-configuration)
 - [Database and Persistent Storage](#database-and-persistent-storage)
+- [Secrets Management](#secrets-management)
 - [Security](#security)
 - [Reliability and Resource Management](#reliability-and-resource-management)
 - [Horizontal Pod Autoscaling](#horizontal-pod-autoscaling)
+- [Argo CD and GitOps](#argo-cd-and-gitops)
 - [Pipeline Evidence](#pipeline-evidence)
 - [Deployment and Verification](#deployment-and-verification)
 - [Troubleshooting](#troubleshooting)
 - [Future Improvements](#future-improvements)
+- [Author](#author)
 
 ## Project Overview
 
@@ -34,13 +37,16 @@ The application and database run as separate Kubernetes workloads. Kubernetes Se
 ### Key Features
 
 - Dockerized Spring Boot application.
-- Jenkins pipeline for application build and delivery.
+- Jenkins pipeline for application build and testing.
 - Docker image build and registry publishing.
 - Kubernetes Deployment with a minimum of two application replicas.
 - MySQL StatefulSet with persistent storage.
 - Kubernetes Services for application access and database connectivity.
 - ConfigMap-based application configuration.
-- Sealed Secrets integration for encrypted secret manifests.
+- Kubernetes Secret for runtime database credentials.
+- Argo CD Application for declarative GitOps reconciliation.
+- Automated synchronization and self-healing configuration in Argo CD.
+- Automated pruning of resources removed from the Git-managed desired state.
 - CPU and memory requests and limits.
 - Startup, readiness, and liveness probes.
 - NetworkPolicy manifest for intended database ingress restrictions.
@@ -54,10 +60,13 @@ The application and database run as separate Kubernetes workloads. Kubernetes Se
 ```mermaid
 flowchart TD
     Developer[Developer]
-    Git[Git Repository]
+    Git[GitHub Repository]
     Jenkins[Jenkins Pipeline]
     Docker[Docker Image Build]
     Registry[Docker Hub]
+
+    ArgoCD[Argo CD]
+    AppManifest[GitOps Application Manifest]
     K8s[Kubernetes Cluster]
 
     Client[Client / Browser]
@@ -67,7 +76,7 @@ flowchart TD
     App3[Additional Replica When Needed]
     HPA[Horizontal Pod Autoscaler]
     Config[ConfigMap]
-    Secret[SealedSecret / Kubernetes Secret]
+    Secret[Kubernetes Secret]
     DBService[MySQL Service]
     Policy[MySQL Ingress NetworkPolicy]
     MySQL[MySQL StatefulSet Pod]
@@ -78,6 +87,10 @@ flowchart TD
     Jenkins --> Docker
     Docker --> Registry
     Registry -. Image pulled by cluster .-> K8s
+
+    Git --> AppManifest
+    AppManifest --> ArgoCD
+    ArgoCD -. Reconciles desired state .-> K8s
 
     Client --> AppService
     AppService --> App1
@@ -99,9 +112,15 @@ flowchart TD
     HPA -. Controls Deployment replica count .-> App2
 ```
 
-The diagram represents the intended architecture. The HPA manages the application Deployment's replica count within its configured range. The database runs independently using a StatefulSet and persistent storage.
+The diagram represents the project's architecture and intended relationships between components.
 
-Exact Jenkins triggers, registry configuration, and enforcement of network restrictions depend on the deployed configuration.
+Jenkins handles the application build and image delivery workflow. Argo CD monitors the Git-managed Kubernetes configuration and reconciles the cluster with the desired state declared by the Argo CD Application.
+
+The HPA manages the application Deployment's replica count within its configured range. The database runs independently using a StatefulSet and persistent storage.
+
+The diagram does not imply that Jenkins automatically updates the Kubernetes manifests or triggers an Argo CD deployment after every image build. That behavior depends on the configured pipeline and release workflow.
+
+Exact Jenkins triggers, registry configuration, image tags, and enforcement of network restrictions depend on the deployed configuration.
 
 ## Technology Stack
 
@@ -114,11 +133,12 @@ Exact Jenkins triggers, registry configuration, and enforcement of network restr
 | Container Registry | Docker Hub |
 | Orchestration | Kubernetes |
 | Local Cluster | Minikube |
+| GitOps | Argo CD |
 | Application Workload | Deployment |
 | Database Workload | StatefulSet |
 | Networking | Kubernetes Services, NetworkPolicy |
 | Configuration | ConfigMap |
-| Secret Management | Kubernetes Secret, Sealed Secrets |
+| Secret Management | Kubernetes Secret |
 | Persistent Storage | PersistentVolumeClaim |
 | Autoscaling | Horizontal Pod Autoscaler |
 | Availability Controls | PodDisruptionBudget |
@@ -129,6 +149,8 @@ Exact Jenkins triggers, registry configuration, and enforcement of network restr
 
 ```text
 spring-petclinic-DevOps/
+├── ArgoCD/
+│   └── petclinic-application.yaml
 ├── Docker/
 │   └── Dockerfile
 ├── Jenkins/
@@ -143,7 +165,6 @@ spring-petclinic-DevOps/
 │   ├── app-pdb.yaml
 │   ├── app-service.yaml
 │   ├── limit-range.yaml
-│   ├── mysql-secret.yaml
 │   ├── mysql-service.yaml
 │   ├── mysql-statefulset.yaml
 │   ├── namespace.yaml
@@ -152,6 +173,7 @@ spring-petclinic-DevOps/
 ├── screenshots/
 │   ├── 1st-pipeline-buid-test-and-build-docker-image.png
 │   ├── 1st-pipeline-stages.png
+│   ├── ArgoCD-healthy-synced.png
 │   ├── auto-scaling-hpa-watch.png
 │   ├── auto-scaling-pods-watch.png
 │   ├── pipeline-stages-push-docker-image.png
@@ -166,7 +188,7 @@ spring-petclinic-DevOps/
     └── screenshots/
 ```
 
-**Security note:** The `backups/` directory is intended for local recovery. Ensure backup files are excluded from Git if they contain credentials, encrypted material that should remain private, or other sensitive configuration.
+**Security note:** The `backups/` directory is intended for local recovery. Ensure backup files are excluded from Git if they contain credentials, secret values, cluster-specific configuration, or other sensitive material. Review the existing backup before publishing or sharing it.
 
 ## CI/CD Pipeline
 
@@ -184,6 +206,8 @@ The workflow covers application build and testing, Docker image creation, and im
 The exact stages, credentials configuration, image tags, and triggers are defined by the Jenkinsfile and Jenkins environment.
 
 Registry credentials should be stored in Jenkins Credentials, not hardcoded in source files.
+
+Jenkins image publishing and Argo CD deployment reconciliation are separate parts of the workflow. A published image does not automatically guarantee a Kubernetes rollout unless the deployment image reference or release process is updated accordingly.
 
 ## Docker
 
@@ -264,7 +288,7 @@ The ConfigMap keeps non-sensitive settings outside the application image, making
 
 MySQL uses a PersistentVolumeClaim associated with the StatefulSet.
 
-The current database claim has the following configuration:
+The observed database claim has the following configuration:
 
 | Property | Value |
 |---|---|
@@ -277,19 +301,37 @@ Persistent storage helps retain database files when the database Pod is recreate
 
 Persistent volumes are not a replacement for tested database backups.
 
+## Secrets Management
+
+The application uses a Kubernetes Secret named `mysql-secret` in the `petclinic` namespace to provide database credentials to the MySQL container.
+
+The StatefulSet references the following keys:
+
+- `username`
+- `password`
+- `root-password`
+
+The Secret currently exists directly in the Kubernetes cluster. A corresponding Secret manifest is intentionally not stored in the Git repository.
+
+### Current Approach
+
+- The application consumes the Secret through Kubernetes `secretKeyRef` references.
+- Secret values are kept separate from the version-controlled application manifests.
+- The Secret is provisioned and maintained separately from the Git-managed Kubernetes resources.
+- The `k8s/mysql-secret.yaml` manifest is not currently present in the repository.
+- The deleted SealedSecret manifest is no longer part of the current Git-managed configuration.
+
+This means the current cluster depends on the separately provisioned Secret being present. Cloning the repository and applying the manifests alone will not recreate the database credentials.
+
+### Production Considerations
+
+For a reproducible production deployment, a dedicated secrets-management approach should be established. Possible approaches include External Secrets Operator backed by a secrets manager, or Sealed Secrets configured and validated for the target cluster.
+
+Sensitive credentials must not be committed to Git as plaintext. Base64 encoding is not encryption, and a private repository should not be treated as a secrets manager.
+
+The secret-management solution should also define credential rotation, access controls, recovery procedures, and how secrets are provisioned when a new environment is created.
+
 ## Security
-
-### Secret Management
-
-The repository includes an encrypted SealedSecret manifest:
-
-[`k8s/mysql-secret.yaml`](k8s/mysql-secret.yaml)
-
-The Sealed Secrets controller can decrypt this manifest into a Kubernetes Secret in the intended cluster and namespace.
-
-Sensitive values should not be committed as plaintext. The controller's private sealing key must be backed up securely outside source control.
-
-Local Kubernetes backups may contain credentials or other sensitive information and must be excluded from Git.
 
 ### NetworkPolicy
 
@@ -300,6 +342,15 @@ The policy selects Pods labelled `app=mysql` and permits inbound TCP traffic on 
 The policy does not define application ingress or egress restrictions.
 
 Effective enforcement depends on the cluster's CNI implementation. The existence of a NetworkPolicy resource alone does not guarantee that traffic is filtered; the cluster networking configuration must support enforcement.
+
+### Credential and Backup Handling
+
+- Store registry credentials in Jenkins Credentials.
+- Keep database credentials outside source-controlled manifests.
+- Do not commit plaintext credentials or secret-bearing backup files.
+- Restrict access to Kubernetes Secrets using appropriate RBAC permissions.
+- Protect backups of cluster configuration and secret-management keys.
+- Use a dedicated secrets-management solution for production deployments.
 
 ## Reliability and Resource Management
 
@@ -406,6 +457,61 @@ This test demonstrates HPA behavior under the specific local workload. It is not
 
 ![HPA scale-down evidence](screenshots/scaledown.png)
 
+## Argo CD and GitOps
+
+Argo CD is used to manage the desired state of the PetClinic Kubernetes resources from Git.
+
+The Argo CD Application manifest is stored in [`ArgoCD/petclinic-application.yaml`](ArgoCD/petclinic-application.yaml).
+
+### Application Configuration
+
+The Application points to the GitHub repository and uses the `k8s/` directory as its source path.
+
+| Setting | Configuration |
+|---|---|
+| Application name | `petclinic` |
+| Argo CD namespace | `argocd` |
+| Git branch | `main` |
+| Manifest path | `k8s/` |
+| Destination namespace | `petclinic` |
+| Automated sync | Enabled |
+| Self-healing | Enabled |
+| Pruning | Enabled |
+
+The Application uses automated synchronization with `selfHeal: true` and `prune: true`.
+
+### Automated Synchronization
+
+Automated synchronization allows Argo CD to apply eligible changes from the Git-managed desired state without requiring a manual sync for each change.
+
+The self-healing configuration allows Argo CD to reconcile supported live-resource changes that differ from the desired state in Git.
+
+The default reconciliation interval can vary with Argo CD configuration. A webhook can also be configured to notify Argo CD of repository changes.
+
+### Pruning and Resource Lifecycle
+
+With `prune: true`, Argo CD can delete resources it manages when their manifests are removed from the tracked Git source.
+
+This behavior was relevant during the SealedSecret troubleshooting process: after the SealedSecret manifest was removed from Git and pruning was enabled, the old SealedSecret resource was removed from the cluster, while the separately existing ordinary Kubernetes Secret remained available.
+
+This outcome was verified in the current cluster. It should not be interpreted as a guarantee that pruning will always preserve a same-named Secret; the resource's ownership and controller behavior matter.
+
+Pruning is a potentially destructive operation. Changes to tracked manifests should be reviewed carefully, particularly for persistent data, credentials, and resources that are not intended to be deleted automatically.
+
+### Secrets and GitOps Scope
+
+The current Argo CD Application tracks the `k8s/` directory. The ordinary `mysql-secret` is not defined by a manifest in that directory and is maintained separately from Argo CD's Git-managed resources.
+
+Consequently, Argo CD does not provide complete lifecycle management for that Secret. A fresh environment requires a separate, secure process to provision the database credentials before the workloads that depend on them can operate successfully.
+
+### Verification Evidence
+
+The repository includes a screenshot of the Argo CD Application showing the synchronized and healthy state:
+
+![Argo CD Application — Synced and Healthy](screenshots/ArgoCD-healthy-synced.png)
+
+This screenshot records the observed Application state at the time it was captured. Current synchronization and health should be checked in the cluster when reproducing the project.
+
 ## Pipeline Evidence
 
 The `screenshots/` directory contains evidence of pipeline execution and Kubernetes operations.
@@ -451,8 +557,11 @@ Install and configure:
 - Minikube or another Kubernetes cluster
 - Git
 - Jenkins and the required build tools, if running the pipeline
+- Argo CD, if using GitOps synchronization
 
 Ensure the cluster has sufficient resources and a working StorageClass for the MySQL persistent volume.
+
+The database credentials must be provisioned separately because the repository does not currently include a Secret manifest.
 
 ### 1. Clone the Repository
 
@@ -482,13 +591,19 @@ kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/app-configmap.yaml
 ```
 
-### 5. Apply the Database Secret
+### 5. Provision the Database Secret
 
-```bash
-kubectl apply -f k8s/mysql-secret.yaml
-```
+Before deploying MySQL, provision the `mysql-secret` Secret in the `petclinic` namespace using an approved secure method.
 
-The Sealed Secrets controller must be installed and available in the cluster. The encrypted manifest must target the correct namespace and Secret name.
+The Secret must contain these keys:
+
+- `username`
+- `password`
+- `root-password`
+
+Do not attempt to apply `k8s/mysql-secret.yaml`; that file is not present in the current repository.
+
+Do not place actual credentials in shell history, source-controlled files, or public documentation. Use an appropriate secure provisioning process for the target environment.
 
 ### 6. Deploy MySQL
 
@@ -496,6 +611,8 @@ The Sealed Secrets controller must be installed and available in the cluster. Th
 kubectl apply -f k8s/mysql-service.yaml
 kubectl apply -f k8s/mysql-statefulset.yaml
 ```
+
+Wait for the database Pod to become ready before relying on application connectivity.
 
 ### 7. Deploy the Application
 
@@ -532,7 +649,10 @@ kubectl get hpa -n petclinic
 kubectl get pdb -n petclinic
 kubectl get resourcequota -n petclinic
 kubectl get limitrange -n petclinic
+kubectl get secret mysql-secret -n petclinic
 ```
+
+The last command displays Secret metadata, not its stored credential values.
 
 Inspect rollout status and application logs:
 
@@ -566,6 +686,22 @@ kubectl delete -f tests/hpa-load-generator.yaml
 
 Monitor the HPA and Deployment to observe scale-down behavior. The test manifest can be retained for future repeatable validation.
 
+### 12. Verify Argo CD
+
+Check the Application's synchronization and health:
+
+```bash
+kubectl get application petclinic -n argocd
+```
+
+Inspect Application conditions and resource status:
+
+```bash
+kubectl describe application petclinic -n argocd
+```
+
+The Application should be reviewed for both synchronization status and health status. A synchronized Application is not necessarily healthy, and a healthy workload does not by itself mean that all resources are synchronized with Git.
+
 ## Troubleshooting
 
 Troubleshooting notes and related evidence are maintained in [`troubleshooting/README.md`](troubleshooting/README.md).
@@ -580,6 +716,36 @@ The troubleshooting record should capture:
 
 Only verified results should be marked as resolved.
 
+### Issue: SealedSecret Synchronization Conflict
+
+**Symptoms**
+
+Argo CD reported an error indicating that the `mysql-secret` resource already existed and was not managed by the SealedSecret controller.
+
+The `SealedSecret/mysql-secret` resource was also shown as `OutOfSync`.
+
+**Root Cause**
+
+The repository previously contained a SealedSecret manifest, while an ordinary Kubernetes Secret with the same name already existed in the `petclinic` namespace. The Secret was provisioned separately from the Git-managed manifest.
+
+**Resolution**
+
+- Removed the SealedSecret manifest from the Git-managed `k8s/` directory.
+- Enabled automated synchronization and self-healing in the Argo CD Application configuration.
+- Enabled pruning so that Argo CD could remove resources tracked by the Application that were no longer present in the Git source.
+- Verified that the old SealedSecret resource was removed.
+- Verified that the ordinary `mysql-secret` Secret remained present in the cluster.
+- Verified that the Spring PetClinic Pods and MySQL Pod remained `Running`.
+- Verified that the MySQL PVC remained `Bound`.
+
+**Outcome**
+
+The Argo CD Application was subsequently observed as `Synced` and `Healthy`. The ordinary Secret remained available, and the running application and database workloads were not disrupted during the observed validation.
+
+**Current Limitation**
+
+The Secret is not currently managed by a manifest in the repository. A new environment therefore requires secure provisioning of the Secret before the dependent database workload can operate.
+
 ## Future Improvements
 
 Potential future enhancements include:
@@ -587,7 +753,8 @@ Potential future enhancements include:
 - Automated deployment triggered by successful image publishing.
 - Versioned and reproducible release tags.
 - Helm charts for reusable Kubernetes packaging.
-- GitOps-based deployment management with Argo CD.
+- A fully reproducible GitOps workflow with explicit release promotion.
+- Secure Secret lifecycle management using External Secrets Operator or correctly configured Sealed Secrets.
 - Metrics and dashboards with Prometheus and Grafana.
 - Centralized log collection.
 - Additional NetworkPolicy rules after mapping required traffic flows.
