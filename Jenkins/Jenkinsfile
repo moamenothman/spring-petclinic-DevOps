@@ -199,23 +199,25 @@ PY
             }
         }
     }
-
     post {
-        always {
-            sh '''
-                rm -rf image-context
-                rm -rf .docker-config
-            '''
-            echo 'Pipeline finished. Review the stage results above.'
-        }
+    always {
+        sh '''
+            docker image rm \
+              "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG" \
+              "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest" \
+              || true
 
-        success {
-            echo 'Tests, packaging, Docker build, and image publishing succeeded.'
-        }
+            rm -rf image-context
+            rm -rf .docker-config
+        '''
+        echo 'Pipeline finished. Review the stage results above.'
+    }
 
-        failure {
-            echo 'Pipeline failed. Review the failed stage before retrying.'
-        }
+    success {
+        echo 'Tests, packaging, Docker build, and image publishing succeeded.'
+    }
+
+    failure {
+        echo 'Pipeline failed. Review the failed stage before retrying.'
     }
 }
-
