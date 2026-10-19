@@ -716,36 +716,6 @@ The troubleshooting record should capture:
 
 Only verified results should be marked as resolved.
 
-### Issue: SealedSecret Synchronization Conflict
-
-**Symptoms**
-
-Argo CD reported an error indicating that the `mysql-secret` resource already existed and was not managed by the SealedSecret controller.
-
-The `SealedSecret/mysql-secret` resource was also shown as `OutOfSync`.
-
-**Root Cause**
-
-The repository previously contained a SealedSecret manifest, while an ordinary Kubernetes Secret with the same name already existed in the `petclinic` namespace. The Secret was provisioned separately from the Git-managed manifest.
-
-**Resolution**
-
-- Removed the SealedSecret manifest from the Git-managed `k8s/` directory.
-- Enabled automated synchronization and self-healing in the Argo CD Application configuration.
-- Enabled pruning so that Argo CD could remove resources tracked by the Application that were no longer present in the Git source.
-- Verified that the old SealedSecret resource was removed.
-- Verified that the ordinary `mysql-secret` Secret remained present in the cluster.
-- Verified that the Spring PetClinic Pods and MySQL Pod remained `Running`.
-- Verified that the MySQL PVC remained `Bound`.
-
-**Outcome**
-
-The Argo CD Application was subsequently observed as `Synced` and `Healthy`. The ordinary Secret remained available, and the running application and database workloads were not disrupted during the observed validation.
-
-**Current Limitation**
-
-The Secret is not currently managed by a manifest in the repository. A new environment therefore requires secure provisioning of the Secret before the dependent database workload can operate.
-
 ## Future Improvements
 
 Potential future enhancements include:
