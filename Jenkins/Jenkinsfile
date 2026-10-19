@@ -1,0 +1,98 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        APP_REPO = 'https://github.com/moamenothman/spring-petclinic.git'
+        APP_DIR = 'app-src'
+        IMAGE_NAME = 'spring-petclinic'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout DevOps Repository') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Checkout Application') {
+            steps {
+                sh '''
+                    rm -rf "$APP_DIR"
+                    git clone --depth 1 "$APP_REPO" "$APP_DIR"
+                '''
+            }
+        }
+
+        stage('Test and Package') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -v "$WORKSPACE/$APP_DIR:/workspace" \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -w /workspace \
+                      maven:3.9.16-eclipse-temurin-17 \
+                      bash -lc '
+                        set -e
+                        apt-get update
+                        apt-get install -y docker.io curl
+                        mkdir -p /usr/local/lib/docker/cli-plugins
+                        curl -fsSL \
+                          https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64 \
+                          -o /usr/local/lib/docker/cli-plugins/docker-compose
+                        chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+                        java -version
+                        docker version
+                        docker compose version
+                        chmod +x ./mvnw
+                        ./mvnw -B verify
+                      '
+                '''
+            }
+        }
+
+        stage('Prepare Docker Context') {
+            steps {
+                sh '''
+                    test -f "$WORKSPACE/$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar"
+                    rm -rf image-context
+                    mkdir -p image-context
+                    cp Docker/Dockerfile image-context/Dockerfile
+                    cp "$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar" image-context/app.jar
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    docker build \
+                      -t "$IMAGE_NAME:$IMAGE_TAG" \
+                      -t "$IMAGE_NAME:latest" \
+                      image-context
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'rm -rf image-context'
+            echo 'Pipeline finished. Review the stages above for the actual result.'
+        }
+
+        success {
+            echo 'Tests, packaging, and Docker image build succeeded.'
+        }
+
+        failure {
+            echo 'Pipeline failed. Docker image publishing must not proceed.'
+        }
+    }
+}
