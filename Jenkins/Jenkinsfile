@@ -42,7 +42,7 @@ pipeline {
                       -w /workspace \
                       maven:3.9.16-eclipse-temurin-17 \
                       bash -lc '
-                        trap '\''if [ -d /workspace/target ]; then chown -R 105:108 /workspace/target || true; fi'\'' EXIT
+                        trap "if [ -d /workspace/target ]; then chown -R 105:108 /workspace/target || true; fi" EXIT
 
                         set -e
                         apt-get update
