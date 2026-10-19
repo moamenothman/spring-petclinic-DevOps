@@ -75,13 +75,6 @@ This project aims to build an end-to-end DevOps workflow for Spring PetClinic, c
 - Monitor application and cluster health.
 - Configure dashboards and alerts.
 
-## Security Notes
-
-- Do not commit passwords, access tokens, or other credentials to Git.
-- Use Jenkins Credentials for pipeline secrets.
-- Use Kubernetes Secrets for runtime credentials, with appropriate RBAC and secure cluster configuration.
-- Restrict database access to authorized workloads.
-
 ## Current Status
 
 **Last completed milestone:** Docker image successfully published and the application verified locally with MySQL.
