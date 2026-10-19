@@ -1,0 +1,99 @@
+namespace: petclinic
+
+app:
+  name: spring-petclinic
+  replicaCount: 2
+  image:
+    repository: moamenothman1/spring-petclinic
+    tag: "6"
+    pullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    port: 8080
+    nodePort: 30080
+  config:
+    springProfilesActive: mysql
+    mysqlUrl: jdbc:mysql://mysql:3306/petclinic
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  probes:
+    startup:
+      failureThreshold: 30
+      periodSeconds: 10
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 3
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 20
+      timeoutSeconds: 3
+
+mysql:
+  enabled: true
+  name: mysql
+  image: mysql:8.4
+  database: petclinic
+  replicas: 1
+  service:
+    port: 3306
+  persistence:
+    enabled: true
+    size: 2Gi
+    accessMode: ReadWriteOnce
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  cpuUtilization: 70
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+externalSecret:
+  name: mysql-secret
+
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "1"
+    requests.memory: 3Gi
+    limits.cpu: "6"
+    limits.memory: 6Gi
+    pods: "10"
+    services: "5"
+    persistentvolumeclaims: "3"
+    requests.storage: 5Gi
+
+limitRange:
+  enabled: true
+  limits:
+    - type: Container
+      min:
+        cpu: 10m
+        memory: 32Mi
+      max:
+        cpu: "2"
+        memory: 2Gi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      default:
+        cpu: 500m
+        memory: 512Mi
+
+networkPolicy:
+  enabled: true

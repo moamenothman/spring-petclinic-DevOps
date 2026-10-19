@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spring-petclinic-config
+  namespace: {{ .Values.namespace }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.app.config.springProfilesActive | quote }}
+  MYSQL_URL: {{ .Values.app.config.mysqlUrl | quote }}
