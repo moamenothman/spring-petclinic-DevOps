@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -10,6 +11,8 @@ pipeline {
     environment {
         APP_REPO = 'https://github.com/moamenothman/spring-petclinic.git'
         APP_DIR = 'app-src'
+
+        DOCKERHUB_NAMESPACE = 'moamenothman1'
         IMAGE_NAME = 'spring-petclinic'
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
@@ -73,26 +76,146 @@ pipeline {
             steps {
                 sh '''
                     docker build \
-                      -t "$IMAGE_NAME:$IMAGE_TAG" \
-                      -t "$IMAGE_NAME:latest" \
+                      -t "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG" \
+                      -t "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest" \
                       image-context
                 '''
+            }
+        }
+
+        stage('Create Docker Hub Repository if Missing') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+
+                        export DOCKERHUB_NAMESPACE IMAGE_NAME
+                        export DOCKERHUB_USERNAME DOCKERHUB_TOKEN
+
+                        python3 - <<'PY'
+import json
+import os
+import urllib.request
+import urllib.error
+
+username = os.environ["DOCKERHUB_USERNAME"]
+token = os.environ["DOCKERHUB_TOKEN"]
+namespace = os.environ["DOCKERHUB_NAMESPACE"]
+repo = os.environ["IMAGE_NAME"]
+
+def request(url, method="GET", data=None, bearer=None):
+    headers = {"Content-Type": "application/json"}
+    if bearer:
+        headers["Authorization"] = "Bearer " + bearer
+
+    body = json.dumps(data).encode() if data is not None else None
+    req = urllib.request.Request(
+        url, data=body, headers=headers, method=method
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            content = response.read()
+            return response.status, json.loads(content) if content else {}
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode(errors="replace")
+
+status, result = request(
+    "https://hub.docker.com/v2/users/login/",
+    method="POST",
+    data={"username": username, "password": token}
+)
+
+if status != 200 or not isinstance(result, dict) or not result.get("token"):
+    raise SystemExit("Docker Hub authentication failed; check the Jenkins credential.")
+
+jwt = result["token"]
+repo_url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/"
+
+status, result = request(repo_url, bearer=jwt)
+
+if status == 200:
+    print("Docker Hub repository already exists.")
+elif status == 404:
+    status, result = request(
+        repo_url,
+        method="POST",
+        bearer=jwt,
+        data={
+            "namespace": namespace,
+            "name": repo,
+            "is_private": False
+        }
+    )
+    if status not in (200, 201):
+        raise SystemExit(
+            f"Repository creation failed (HTTP {status}): {result}"
+        )
+    print("Docker Hub repository created successfully.")
+else:
+    raise SystemExit(
+        f"Repository check failed (HTTP {status}): {result}"
+    )
+PY
+                    '''
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+
+                        export DOCKER_CONFIG="$WORKSPACE/.docker-config"
+                        mkdir -p "$DOCKER_CONFIG"
+
+                        printf '%s' "$DOCKERHUB_TOKEN" |
+                          docker login \
+                            --username "$DOCKERHUB_USERNAME" \
+                            --password-stdin
+
+                        docker push \
+                          "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG"
+
+                        docker push \
+                          "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest"
+
+                        docker logout
+                    '''
+                }
             }
         }
     }
 
     post {
         always {
-            sh 'rm -rf image-context'
-            echo 'Pipeline finished. Review the stages above for the actual result.'
+            sh '''
+                rm -rf image-context
+                rm -rf .docker-config
+            '''
+            echo 'Pipeline finished. Review the stage results above.'
         }
 
         success {
-            echo 'Tests, packaging, and Docker image build succeeded.'
+            echo 'Tests, packaging, Docker build, and image publishing succeeded.'
         }
 
         failure {
-            echo 'Pipeline failed. Docker image publishing must not proceed.'
+            echo 'Pipeline failed. Review the failed stage before retrying.'
         }
     }
 }
+
