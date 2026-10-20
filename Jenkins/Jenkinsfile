@@ -1,0 +1,269 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        APP_REPO = 'https://github.com/moamenothman/spring-petclinic.git'
+        APP_DIR = 'app-src'
+        DOCKERHUB_NAMESPACE = 'moamenothman1'
+        IMAGE_NAME = 'spring-petclinic'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout DevOps Repository') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Checkout Application') {
+            steps {
+                sh '''
+                    set -eu
+
+                    rm -rf "$APP_DIR"
+                    git clone "$APP_REPO" "$APP_DIR"
+                '''
+            }
+        }
+
+        stage('Test and Package') {
+            steps {
+                sh '''
+                    set -eu
+
+                    docker run --rm \
+                      -v "$WORKSPACE/$APP_DIR:/workspace" \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -w /workspace \
+                      maven:3.9.16-eclipse-temurin-17 \
+                      bash -ec '
+                        trap "chown -R 105:108 /workspace/target 2>/dev/null || true" EXIT
+
+                        apt-get update
+                        apt-get install -y --no-install-recommends docker.io curl
+
+                        curl -fsSL \
+                          https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64 \
+                          -o /usr/local/bin/docker-compose
+
+                        chmod +x /usr/local/bin/docker-compose
+
+                        ./mvnw -B verify
+                      '
+                '''
+            }
+        }
+
+        stage('Prepare Docker Context') {
+            steps {
+                sh '''
+                    set -eu
+
+                    JAR_FILE="$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar"
+
+                    test -f "$JAR_FILE"
+                    test -f Docker/Dockerfile
+
+                    rm -rf image-context
+                    mkdir -p image-context
+
+                    cp Docker/Dockerfile image-context/Dockerfile
+                    cp "$JAR_FILE" image-context/app.jar
+
+                    echo "Docker build context prepared."
+                    ls -lh image-context
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    set -eu
+
+                    docker build \
+                      -t "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG" \
+                      -t "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest" \
+                      image-context
+                '''
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        export DOCKER_CONFIG="$WORKSPACE/.docker-config"
+                        mkdir -p "$DOCKER_CONFIG"
+
+                        trap 'docker logout || true' EXIT
+
+                        printf '%s' "$DOCKERHUB_PASSWORD" |
+                          docker login \
+                            --username "$DOCKERHUB_USERNAME" \
+                            --password-stdin
+
+                        docker push "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG"
+                        docker push "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest"
+                    '''
+                }
+            }
+        }
+
+        stage('Update Deployment Image in Git') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github',
+                        usernameVariable: 'GIT_USERNAME',
+                        passwordVariable: 'GIT_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        VALUES_FILE="helm/values.yaml"
+
+                        test -f "$VALUES_FILE"
+
+                        # Update only app.image.tag, preserving the rest
+                        # of the Helm values file and its formatting.
+                        python3 - "$VALUES_FILE" "$IMAGE_TAG" <<'PYTHON'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+new_tag = sys.argv[2]
+
+if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", new_tag):
+    raise SystemExit("ERROR: Invalid image tag.")
+
+lines = path.read_text().splitlines(keepends=True)
+
+app_indent = None
+image_indent = None
+tag_index = None
+
+for i, line in enumerate(lines):
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+
+    indent = len(line) - len(line.lstrip(" "))
+    stripped = line.strip()
+
+    if indent == 0 and re.match(r"^app\\s*:", stripped):
+        app_indent = indent
+        image_indent = None
+        continue
+
+    if app_indent is not None and indent == 0:
+        app_indent = None
+        image_indent = None
+
+    if app_indent is None:
+        continue
+
+    if indent == 2 and re.match(r"^image\\s*:", stripped):
+        image_indent = indent
+        continue
+
+    if indent <= 2 and not re.match(r"^image\\s*:", stripped):
+        if indent == 2:
+            image_indent = None
+
+    if image_indent is not None and indent == 4:
+        match = re.match(r"^\\s*tag\\s*:\\s*(.*?)\\s*(#.*)?$", line.rstrip("\\r\\n"))
+        if match:
+            tag_index = i
+            newline = "\\r\\n" if line.endswith("\\r\\n") else (
+                "\\n" if line.endswith("\\n") else ""
+            )
+            comment = f" {match.group(2)}" if match.group(2) else ""
+            lines[i] = f'    tag: "{new_tag}"{comment}{newline}'
+            break
+
+if tag_index is None:
+    raise SystemExit("ERROR: Could not find app.image.tag in Helm values.")
+
+path.write_text("".join(lines))
+print(f"Updated app.image.tag to {new_tag} in {path}")
+PYTHON
+
+                        echo "Updated Helm image tag:"
+                        grep -n -A 5 -B 3 'tag:' "$VALUES_FILE"
+
+                        git config user.name "Jenkins"
+                        git config user.email "jenkins@users.noreply.github.com"
+
+                        git add "$VALUES_FILE"
+
+                        if git diff --cached --quiet; then
+                            echo "No Helm values changes to commit."
+                            exit 0
+                        fi
+
+                        git commit -m "jenkins: update PetClinic image tag to $IMAGE_TAG"
+
+                        cat > "$WORKSPACE/.git-askpass.sh" <<'ASKPASS'
+#!/bin/sh
+case "$1" in
+    *Username*) printf '%s\\n' "$GIT_USERNAME" ;;
+    *Password*) printf '%s\\n' "$GIT_PASSWORD" ;;
+    *) exit 1 ;;
+esac
+ASKPASS
+
+                        chmod 700 "$WORKSPACE/.git-askpass.sh"
+                        export GIT_ASKPASS="$WORKSPACE/.git-askpass.sh"
+                        export GIT_TERMINAL_PROMPT=0
+
+                        git push origin HEAD:main
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker image rm \
+                  "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG" \
+                  "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest" \
+                  || true
+
+                rm -rf image-context
+                rm -rf .docker-config
+                rm -f .git-askpass.sh
+            '''
+
+            echo 'Pipeline finished. Review the stage results above.'
+        }
+
+        success {
+            echo 'Pipeline completed successfully.'
+        }
+
+        failure {
+            echo 'Pipeline failed. Check the stage logs for details.'
+        }
+    }
+}
