@@ -5,7 +5,7 @@ app:
   replicaCount: 2
   image:
     repository: moamenothman1/spring-petclinic
-    tag: "6"
+    tag: "11"
     pullPolicy: IfNotPresent
   service:
     type: NodePort
