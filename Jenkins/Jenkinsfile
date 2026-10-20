@@ -143,14 +143,12 @@ pipeline {
                         # Update only the tag inside app.image.
                         sed -i '/^app:/,/^[^ ]/{
                             /^  image:/,/^  [^ ]/{
-                                s/^\([[:space:]]*tag:[[:space:]]*\)"[^"]*"/\1"'"$IMAGE_TAG"'"/
+                                s|^    tag:.*|    tag: "'"$IMAGE_TAG"'"|
                             }
                         }' "$VALUES_FILE"
 
                         # Fail unless the intended image tag was updated.
-                        grep -A 4 '^  image:' "$VALUES_FILE" |
-                          grep -Fq "tag: \\"$IMAGE_TAG\\""
-
+                        grep -A 4 '^  image:' "$VALUES_FILE" | grep -Fq "tag: \"$IMAGE_TAG\""
                         echo "Updated Helm image configuration:"
                         grep -A 4 '^  image:' "$VALUES_FILE"
 
