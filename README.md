@@ -1061,33 +1061,6 @@ The troubleshooting record should capture:
 
 Only verified results should be marked as resolved.
 
-### Jenkins Workspace Permissions
-
-The Maven build runs inside a Docker container with the application directory bind-mounted from the Jenkins workspace. Build artifacts created with root ownership can cause permission errors in subsequent Jenkins steps.
-
-The pipeline includes a shell `trap` intended to restore ownership of the Maven `target` directory to UID `105` and GID `108` when the container process exits.
-
-The fix was followed by a successful pipeline execution. The captured evidence documents the successful build workflow, image publishing, and GitOps values update. Further consecutive builds should be used to confirm repeatability and ensure that workspace cleanup continues to work as expected.
-
-### Rolling Update Behavior
-
-When a new Pod appears while an old Pod is still running, this can be normal Deployment rolling-update behavior.
-
-The Deployment controller attempts to replace Pods gradually according to the rollout strategy and readiness status. The exact number of simultaneously running Pods depends on the Deployment strategy, `maxSurge`, `maxUnavailable`, available resources, and readiness of the new Pods.
-
-Argo CD reconciles the desired configuration; it does not directly manage the individual Pod replacement sequence.
-
-Verify the rollout using:
-
-```bash
-kubectl rollout status deployment/spring-petclinic -n petclinic
-kubectl get deployment spring-petclinic -n petclinic
-kubectl get pods -n petclinic -o wide
-kubectl describe deployment spring-petclinic -n petclinic
-```
-
-Do not assume a rollout is complete merely because Argo CD reports that synchronization has started. Confirm the Deployment and Pod status.
-
 ## Future Improvements
 
 Potential future enhancements include:
