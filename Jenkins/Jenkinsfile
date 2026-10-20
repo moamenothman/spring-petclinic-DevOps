@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -39,7 +40,6 @@ pipeline {
 
                     docker run --rm \
                       -v "$WORKSPACE/$APP_DIR:/workspace" \
-                      -v /var/run/docker.sock:/var/run/docker.sock \
                       -w /workspace \
                       maven:3.9.16-eclipse-temurin-17 \
                       bash -ec '
@@ -53,8 +53,9 @@ pipeline {
                           -o /usr/local/bin/docker-compose
 
                         chmod +x /usr/local/bin/docker-compose
-                        ./mvnw -B verify
-                      '
+
+                        bash ./mvnw -B verify
+                    '
                 '''
             }
         }
@@ -140,15 +141,17 @@ pipeline {
                         VALUES_FILE="helm/values.yaml"
                         test -f "$VALUES_FILE"
 
-                        # Update only the tag inside app.image.
+                        # Update the image tag under app.image only.
                         sed -i '/^app:/,/^[^ ]/{
                             /^  image:/,/^  [^ ]/{
                                 s|^    tag:.*|    tag: "'"$IMAGE_TAG"'"|
                             }
                         }' "$VALUES_FILE"
 
-                        # Fail unless the intended image tag was updated.
-                        grep -A 4 '^  image:' "$VALUES_FILE" | grep -Fq "tag: \"$IMAGE_TAG\""
+                        # Verify that the expected tag was written.
+                        grep -A 4 '^  image:' "$VALUES_FILE" |
+                          grep -Fq "tag: \\"$IMAGE_TAG\\""
+
                         echo "Updated Helm image configuration:"
                         grep -A 4 '^  image:' "$VALUES_FILE"
 
@@ -209,3 +212,4 @@ ASKPASS
         }
     }
 }
+```
