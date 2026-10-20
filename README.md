@@ -1,14 +1,12 @@
 # Spring PetClinic — Cloud-Native DevOps Project
 
-A cloud-native DevOps project that automates the build, packaging, container image delivery, and Kubernetes deployment lifecycle of Spring PetClinic.
+A containerized Spring Boot application deployed on Kubernetes, with Jenkins-based CI/CD, Docker image publishing, persistent MySQL storage, declarative Kubernetes resources, Helm-based packaging, and GitOps-based deployment reconciliation using Argo CD.
 
-The project integrates Jenkins CI/CD, Docker, Docker Hub, Helm, Kubernetes, GitHub, and Argo CD to demonstrate a GitOps workflow with automated synchronization, rolling updates, horizontal pod autoscaling, persistent database storage, and operational troubleshooting.
+This project demonstrates practical DevOps workflows for building, testing, packaging, publishing, deploying, and operating a Java application using Docker, Jenkins, Kubernetes, Minikube, GitHub, Helm, and Argo CD.
 
 **Repository:** [spring-petclinic-DevOps](https://github.com/moamenothman/spring-petclinic-DevOps)
 
 **Author:** Mo'men Othman
-
----
 
 ## Table of Contents
 
@@ -17,141 +15,152 @@ The project integrates Jenkins CI/CD, Docker, Docker Hub, Helm, Kubernetes, GitH
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
 - [CI/CD Pipeline](#cicd-pipeline)
-- [Docker Image Management](#docker-image-management)
-- [Helm Configuration](#helm-configuration)
-- [Argo CD and GitOps](#argo-cd-and-gitops)
-- [Kubernetes Rolling Updates](#kubernetes-rolling-updates)
+- [Automated GitOps Image Updates](#automated-gitops-image-updates)
+- [Docker](#docker)
 - [Kubernetes Deployment](#kubernetes-deployment)
+- [Application Configuration](#application-configuration)
 - [Database and Persistent Storage](#database-and-persistent-storage)
-- [Application Configuration and Secrets](#application-configuration-and-secrets)
-- [Security and Resource Governance](#security-and-resource-governance)
+- [Secrets Management](#secrets-management)
+- [Security](#security)
+- [Reliability and Resource Management](#reliability-and-resource-management)
 - [Horizontal Pod Autoscaling](#horizontal-pod-autoscaling)
-- [Self-Healing and Rollback](#self-healing-and-rollback)
-- [Screenshots and Evidence](#screenshots-and-evidence)
+- [Argo CD and GitOps](#argo-cd-and-gitops)
+- [Pipeline Evidence](#pipeline-evidence)
 - [Deployment and Verification](#deployment-and-verification)
 - [Troubleshooting](#troubleshooting)
 - [Future Improvements](#future-improvements)
 - [Author](#author)
 
----
-
 ## Project Overview
 
-Spring PetClinic is a Java-based Spring Boot application. This repository provides the DevOps infrastructure and automation used to build and deploy the application on Kubernetes.
+Spring PetClinic is a Java-based web application built with Spring Boot. This repository focuses on automating its container build and deployment lifecycle and running it on Kubernetes.
 
-The project separates application source code, CI execution, container image publishing, declarative configuration, and cluster reconciliation.
+The application and database run as separate Kubernetes workloads. Kubernetes Services provide application access and internal database discovery, while configuration and credential resources keep connection settings separate from application code.
 
 ### Key Features
 
-- Jenkins pipeline for Maven verification and packaging.
+- Dockerized Spring Boot application.
+- Jenkins pipeline for application build, verification, and packaging.
 - Docker image build and publishing to Docker Hub.
 - Versioned Docker image tags based on Jenkins build numbers.
-- Automated updates to the image tag in Helm values.
-- Git-based release tracking.
-- Argo CD synchronization and self-healing.
-- Helm-based Kubernetes resource management.
-- Kubernetes Deployment with rolling update behavior.
+- Kubernetes Deployment with two initial application replicas.
 - MySQL StatefulSet with persistent storage.
-- Kubernetes Services, ConfigMaps, and Secrets.
+- Kubernetes Services for application access and database connectivity.
+- ConfigMap-based application configuration.
+- Kubernetes Secret for runtime database credentials.
+- Helm chart for packaging and configuring Kubernetes resources.
+- Jenkins stage to update the Git-managed Helm image tag after a successful image push.
+- GitHub commit and push of the updated Helm values.
+- Argo CD Application tracking the Helm chart in the DevOps repository.
+- Automated synchronization and self-healing configuration in Argo CD.
+- Automated pruning of resources removed from the Git-managed desired state.
+- CPU and memory requests and limits.
+- Startup, readiness, and liveness probes.
+- NetworkPolicy manifest for intended database ingress restrictions.
+- PodDisruptionBudget for voluntary disruption protection.
+- ResourceQuota and LimitRange for namespace resource governance.
 - Horizontal Pod Autoscaler with observed scale-up and scale-down behavior.
-- ResourceQuota and LimitRange for resource governance.
-- NetworkPolicy and PodDisruptionBudget manifests.
-- Troubleshooting documentation and screenshots of deployment operations.
-
-### Project Goals
-
-The primary goals are to demonstrate how to:
-
-1. Automate application testing and packaging.
-2. Build and publish container images.
-3. connect CI output to version-controlled deployment configuration.
-4. Use Git as the source of truth for the desired application image.
-5. Reconcile Kubernetes resources through Argo CD.
-6. Observe Kubernetes rolling updates during application releases.
-7. Monitor scaling, readiness, and workload health.
-8. Document technical failures, fixes, and verified outcomes.
-
----
+- Kubernetes rollout, rollback, and self-healing demonstrations.
+- Screenshot evidence of pipeline execution, GitOps updates, and Kubernetes operations.
+- Troubleshooting documentation for issues encountered during implementation.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
+    Developer[Developer]
     Source[Spring PetClinic Source Repository]
-    DevOps[DevOps Repository]
+    DevOpsRepo[DevOps Repository]
     Jenkins[Jenkins Pipeline]
-    Maven[Maven Verify and Package]
-    Docker[Build Docker Image]
+    Tests[Maven Tests and Package]
+    Image[Docker Image Build]
     Registry[Docker Hub]
-    Helm[Update helm/values.yaml]
+    Values[Update helm/values.yaml]
     Commit[Git Commit and Push]
-    Argo[Argo CD]
+    ArgoCD[Argo CD]
+    Helm[Helm Chart]
     K8s[Kubernetes Cluster]
-    Deploy[Spring PetClinic Deployment]
-    Old[Previous Version Pod]
-    New[New Version Pod]
-    MySQL[MySQL StatefulSet]
-    PVC[PersistentVolumeClaim]
+    Client[Client / Browser]
+    Service[PetClinic Service]
+    App1[Spring PetClinic Pod]
+    App2[Spring PetClinic Pod]
+    App3[Additional Replica When Needed]
     HPA[Horizontal Pod Autoscaler]
+    Config[ConfigMap]
+    Secret[Kubernetes Secret]
+    DBService[MySQL Service]
+    Policy[MySQL Ingress NetworkPolicy]
+    MySQL[MySQL StatefulSet Pod]
+    PVC[PersistentVolumeClaim]
 
-    Source --> Jenkins
-    DevOps --> Jenkins
-    Jenkins --> Maven
-    Maven --> Docker
-    Docker --> Registry
-    Registry -. Image pull .-> K8s
-    Docker --> Helm
-    Helm --> Commit
-    Commit --> DevOps
-    DevOps --> Argo
-    Argo --> K8s
-    K8s --> Deploy
-    Deploy --> Old
-    Deploy --> New
-    Deploy --> MySQL
+    Developer --> DevOpsRepo
+    DevOpsRepo --> Jenkins
+    Jenkins --> Source
+    Jenkins --> Tests
+    Tests --> Image
+    Image --> Registry
+    Tests --> Values
+    Values --> Commit
+    Commit --> DevOpsRepo
+    DevOpsRepo --> ArgoCD
+    ArgoCD --> Helm
+    Helm --> K8s
+    Registry -. Image pulled by cluster .-> K8s
+
+    Client --> Service
+    Service --> App1
+    Service --> App2
+    Service -. Additional replicas .-> App3
+    Config -. Configuration .-> App1
+    Config -. Configuration .-> App2
+    Secret -. Credentials .-> App1
+    Secret -. Credentials .-> App2
+
+    App1 --> DBService
+    App2 --> DBService
+    DBService --> MySQL
+    Policy -. Intended ingress restriction .-> MySQL
     MySQL --> PVC
-    HPA --> Deploy
+
+    HPA -. Adjusts replica count .-> App1
+    HPA -. Controls Deployment .-> App2
 ```
 
-### Architecture Flow
+The architecture separates application source code, CI execution, image publishing, and GitOps-based deployment reconciliation.
 
-1. Jenkins checks out the DevOps repository and clones the application source.
-2. Maven verifies and packages the application.
-3. Docker builds the application image and publishes it to Docker Hub.
-4. Jenkins updates `app.image.tag` in `helm/values.yaml`.
-5. Jenkins commits and pushes the updated Helm configuration to GitHub.
-6. Argo CD detects the changed desired state and synchronizes the configured Helm application.
-7. Kubernetes reconciles the updated Deployment and performs the rolling update.
-8. The new Pods are checked for readiness and the final workload state is verified.
+Jenkins builds and tests the application, builds a Docker image, publishes the image to Docker Hub, and updates the image tag in `helm/values.yaml`.
 
-Argo CD applies and reconciles the desired configuration. The Kubernetes Deployment controller manages the actual Pod rollout.
+Argo CD monitors the Git-managed Helm chart and reconciles the Kubernetes resources against the desired state declared in the Argo CD Application.
 
----
+The Kubernetes Deployment controller performs the actual Pod rollout when the image reference changes. Argo CD initiates the desired-state reconciliation; Kubernetes manages the replacement of application Pods according to the Deployment's rollout strategy.
+
+The HPA manages the application Deployment's replica count within its configured range. The database runs independently using a StatefulSet and persistent storage.
+
+The architecture diagram represents the intended workflow. The actual result of each release must be verified through the Jenkins build, Git commit, Argo CD status, and Kubernetes rollout.
 
 ## Technology Stack
 
 | Area | Technology |
 |---|---|
 | Application | Spring Boot, Java |
-| Build and Verification | Maven |
+| Database | MySQL 8.4 |
 | Containerization | Docker |
 | CI/CD | Jenkins |
 | Container Registry | Docker Hub |
 | Source Control | Git, GitHub |
-| Kubernetes Packaging | Helm |
 | Orchestration | Kubernetes |
 | Local Cluster | Minikube |
 | GitOps | Argo CD |
-| Database | MySQL |
+| Kubernetes Packaging | Helm |
+| Application Workload | Deployment |
+| Database Workload | StatefulSet |
+| Networking | Kubernetes Services, NetworkPolicy |
+| Configuration | ConfigMap, Helm values |
+| Secret Management | Kubernetes Secret |
 | Persistent Storage | PersistentVolumeClaim |
-| Configuration | ConfigMap |
-| Secrets | Kubernetes Secret |
 | Autoscaling | Horizontal Pod Autoscaler |
 | Availability Controls | PodDisruptionBudget |
 | Resource Governance | ResourceQuota, LimitRange |
-| Networking | Kubernetes Services, NetworkPolicy |
-
----
 
 ## Repository Structure
 
@@ -164,6 +173,10 @@ spring-petclinic-DevOps/
 ├── Jenkins/
 │   ├── Jenkinsfile
 │   └── Jenkinsfile.before-helm
+├── README.md
+├── backups/
+│   ├── petclinic-20261020-031027.sql
+│   └── petclinic-k8s-backup.yaml
 ├── helm/
 │   ├── Chart.yaml
 │   ├── values.yaml
@@ -191,174 +204,190 @@ spring-petclinic-DevOps/
 │   ├── namespace.yaml
 │   ├── network-policy.yaml
 │   └── resource-quota.yaml
-├── backups/
-│   ├── petclinic-20261020-031027.sql
-│   └── petclinic-k8s-backup.yaml
 ├── screenshots/
+│   ├── 1st-pipeline-buid-test-and-build-docker-image.png
+│   ├── 1st-pipeline-stages.png
+│   ├── ArgoCD-detect-changes-in-variables-outofsync.png
+│   ├── ArgoCD-healthy-synced.png
+│   ├── ArgoCD-synced-to helm-and-doing-rollout-updates .png
+│   ├── ArgoCD-synced-to-helm-chat-repo-before-changing-values.png
+│   ├── app-synced-after-new-build.png
+│   ├── auto-scaling-hpa-watch.png
+│   ├── auto-scaling-pods-watch.png
+│   ├── jenkins-commit-in-variables-file.png
+│   ├── jenkins-commit-updated-manifest.png
+│   ├── pileline-stages-success-update-manifast.png
+│   ├── pipeline-stages-changing-imgae-tag-in-hem-variables.png
+│   ├── pipeline-stages-push-docker-image.png
+│   ├── rollback.png
+│   ├── rollout.png
+│   ├── scaledown.png
+│   ├── self-healing-watch.png
+│   └── troubleshooting/
 ├── tests/
 │   └── hpa-load-generator.yaml
-├── troubleshooting/
-│   ├── README.md
-│   └── screenshots/
-└── README.md
+└── troubleshooting/
+    ├── README.md
+    └── screenshots/
 ```
 
-**Important:** The current Argo CD application tracks the `helm/` chart. The `k8s/` directory contains Kubernetes manifests and may be used for direct-manifest workflows or reference, but changes to it do not automatically affect the current Argo CD source unless the Application configuration is changed.
+**GitOps source of truth:** The current Argo CD Application tracks the `helm/` directory. The `k8s/` directory contains standalone Kubernetes manifests and remains useful for inspecting individual resources and for the documented manual deployment workflow. Jenkins updates `helm/values.yaml`, not `k8s/app-deployment.yaml`.
 
-Review backup files before publishing them. Database dumps and Kubernetes backups may contain sensitive data or configuration. Do not commit plaintext credentials or secret-bearing backups.
-
----
+**Security note:** Review both files in `backups/` before publishing or sharing the repository. A SQL dump can contain application data, and a Kubernetes backup can contain sensitive configuration or credentials. Do not commit sensitive backups to a public repository.
 
 ## CI/CD Pipeline
 
-The pipeline is defined in [`Jenkins/Jenkinsfile`](Jenkins/Jenkinsfile).
+The Jenkins pipeline is defined in [`Jenkins/Jenkinsfile`](Jenkins/Jenkinsfile).
 
-### Pipeline Stages
+The pipeline automates the build and image-delivery workflow and includes a GitOps values-update stage.
 
-| Stage | Responsibility |
-|---|---|
-| Checkout DevOps Repository | Retrieves the pipeline and deployment configuration. |
-| Checkout Application | Clones the Spring PetClinic source repository. |
-| Test and Package | Runs Maven verification and packages the application. |
-| Prepare Docker Context | Copies the application artifact and Dockerfile into the build context. |
-| Build Docker Image | Builds the application image with versioned and `latest` tags. |
-| Push Docker Image | Authenticates to Docker Hub and publishes the image. |
-| Update Deployment Image in Git | Updates the Helm image tag, commits the change, and pushes to GitHub. |
+### Pipeline Workflow
 
-The pipeline runs Maven inside a container. The current Maven invocation uses Bash to execute the wrapper script, avoiding dependence on its executable permission.
+1. **Checkout DevOps Repository** — checks out the repository containing the pipeline, Dockerfile, Helm chart, and Kubernetes manifests.
+2. **Checkout Application** — clones the Spring PetClinic application source.
+3. **Test and Package** — runs Maven verification and packaging using the Maven wrapper.
+4. **Prepare Docker Context** — prepares the packaged application artifact and Docker build context.
+5. **Build Docker Image** — builds the application image and applies versioned and `latest` tags.
+6. **Push Docker Image** — authenticates to Docker Hub using Jenkins Credentials and publishes both tags.
+7. **Update Helm Image Tag in Git** — updates the application image tag in `helm/values.yaml`, commits the change, and pushes it to the `main` branch.
+8. **Argo CD Reconciliation** — Argo CD detects the changed Helm values and reconciles the desired state with the Kubernetes cluster.
+9. **Kubernetes Rollout** — the Kubernetes Deployment controller gradually replaces the old application Pods with Pods using the updated image.
 
-A shell `trap` attempts to restore ownership of the Maven `target` directory to UID `105` and GID `108`, as configured for the Jenkins environment.
+The image-update stage executes after image publishing. If an earlier stage fails, the pipeline does not proceed to the GitOps values update.
 
 ### Jenkins Credentials
 
-The pipeline uses Jenkins Credentials rather than embedding registry or Git credentials in source code.
+The pipeline uses separate credentials for Docker Hub and GitHub.
 
 | Credential ID | Purpose |
 |---|---|
-| `dockerhub-credentials` | Authenticates to Docker Hub. |
-| `github` | Authenticates when pushing the Helm values update to GitHub. |
+| `dockerhub-credentials` | Docker Hub image publishing |
+| `github` | GitHub authentication for pushing the Helm values update |
 
-The GitHub credential must have permission to write repository contents. Credentials should never be printed in build logs or committed to Git.
+The `github` credential is configured in Jenkins as **Username with password**. Its password field must contain a valid GitHub Personal Access Token with repository contents write permission.
 
-### Successful Pipeline Outcome
+Credentials should be stored in Jenkins Credentials, not hardcoded into source files or printed in logs.
 
-The latest pipeline run was reported as successful after resolving the Maven Wrapper execution issue.
+The GitHub token must never be committed to the repository. The pipeline uses the credential through Jenkins' credential-binding mechanism and a Git askpass helper for Git authentication.
 
-The successful release workflow connects the build and image delivery stages with a Git commit updating Helm configuration. Argo CD then reconciles the updated desired state.
+### Pipeline Execution Model
 
-The successful Jenkins run is evidence that the pipeline completed its configured stages for that run. Each later release should still be verified independently.
+The pipeline is currently started manually. It does not depend on a GitHub webhook to start a build.
 
----
+This makes the release sequence explicit: a build is initiated, the application is tested and packaged, the image is published, and the Helm values are updated.
 
-## Docker Image Management
+A future enhancement could add an automated source-control trigger with appropriate filtering to avoid unnecessary builds.
 
-The pipeline publishes images to:
+### Pipeline Validation
+
+The latest successful pipeline execution was captured in the repository screenshots. The recorded workflow includes the Maven build, Docker image publishing, and the GitOps values-update stage.
+
+The successful GitOps update was followed by Argo CD detecting the changed values and reconciling the application.
+
+These screenshots document the observed execution. They should not be interpreted as proof that every future build will succeed or that the application has been tested under production traffic.
+
+## Automated GitOps Image Updates
+
+The GitOps image-update stage connects CI image delivery with Argo CD deployment reconciliation.
+
+### End-to-End Release Flow
 
 ```text
-moamenothman1/spring-petclinic
+Manual Jenkins Build
+        |
+        v
+Checkout DevOps Repository
+        |
+        v
+Checkout Application Source
+        |
+        v
+Maven Verify and Package
+        |
+        v
+Build Docker Image
+        |
+        v
+Push Versioned Image to Docker Hub
+        |
+        v
+Update helm/values.yaml
+        |
+        v
+Commit and Push to GitHub (main)
+        |
+        v
+Argo CD Detects Git Change
+        |
+        v
+Argo CD Reconciles Helm Chart
+        |
+        v
+Kubernetes Deployment Rolling Update
+        |
+        v
+Verify Running Application Pods
 ```
 
-The versioned tag is based on the Jenkins build number:
+Jenkins does not directly deploy the application using `kubectl` as part of this workflow. Instead, it updates the desired image reference in Git. Argo CD then reconciles the Kubernetes resources against that desired state.
+
+### Image Tagging Strategy
+
+The pipeline uses the Jenkins build number as the versioned Docker image tag.
+
+The image reference follows this format:
 
 ```text
 moamenothman1/spring-petclinic:<BUILD_NUMBER>
 ```
 
-The pipeline also publishes:
+For example, a hypothetical build numbered `12` would publish:
 
 ```text
-moamenothman1/spring-petclinic:latest
+moamenothman1/spring-petclinic:12
 ```
 
-The versioned tag is used in Helm configuration to identify the intended release. This is preferable to relying on a mutable `latest` tag for deployment tracking.
+The pipeline also publishes the `latest` tag, but the Helm values are updated to reference the versioned tag.
 
-The Docker build context is prepared from the packaged JAR and [`Docker/Dockerfile`](Docker/Dockerfile).
+This allows the requested image version to be tracked in Git and makes releases easier to identify.
 
-A successful image push confirms registry delivery, but the actual running version must be checked in Kubernetes.
+The example build number is illustrative. The actual deployed tag must be checked in the current Helm values and cluster.
 
----
+### Helm Values Update
 
-## Helm Configuration
+The pipeline updates [`helm/values.yaml`](helm/values.yaml).
 
-The current Helm chart is located in `helm/`.
-
-The image configuration is maintained in `helm/values.yaml`, under `app.image`.
-
-Example structure:
+The relevant configuration follows this structure:
 
 ```yaml
-namespace: petclinic
-
 app:
-  name: spring-petclinic
-  replicaCount: 2
   image:
     repository: moamenothman1/spring-petclinic
-    tag: "6"
-    pullPolicy: IfNotPresent
+    tag: "<BUILD_NUMBER>"
 ```
 
-The tag shown above is an example of the previously observed version, not a guarantee of the current release.
+The tag shown above is a placeholder, not a claim about the current deployed version. The real value is maintained by the pipeline and should be checked in the current repository.
 
-### Automated Values Update
+The pipeline modifies the image tag while preserving the rest of the chart configuration, including replica settings, resources, probes, service configuration, and other application settings.
 
-After pushing the new image, Jenkins updates the image tag in `helm/values.yaml`.
+After the update, Jenkins creates a commit describing the new image tag and pushes it to `main`.
 
-The pipeline then commits and pushes the updated file to the `main` branch. The rest of the Helm values should remain unchanged.
+### Argo CD Reconciliation
 
-This approach separates image delivery from deployment reconciliation:
+The Argo CD Application tracks the `main` branch and the `helm/` directory.
 
-- Jenkins builds and publishes the artifact.
-- Git records the desired image version.
-- Argo CD applies the desired Helm configuration.
-- Kubernetes performs the rollout.
+Automated synchronization allows eligible changes in the Git-managed Helm chart to be applied to Kubernetes without requiring a separate manual deployment command for each release.
 
----
-
-## Argo CD and GitOps
-
-The Argo CD Application definition is stored in [`ArgoCD/petclinic-application.yaml`](ArgoCD/petclinic-application.yaml).
-
-The current configuration uses the `main` branch and the `helm/` chart path, with the application deployed into the `petclinic` namespace.
-
-### GitOps Configuration
-
-| Setting | Current Configuration |
-|---|---|
-| Application | `petclinic` |
-| Argo CD namespace | `argocd` |
-| Git branch | `main` |
-| Source path | `helm/` |
-| Destination namespace | `petclinic` |
-| Automated synchronization | Enabled |
-| Self-healing | Enabled |
-| Pruning | Enabled |
-
-The actual configuration should be confirmed against the committed Application manifest when reproducing the project.
-
-### What Happens After a Git Change?
-
-When Jenkins pushes an updated image tag:
-
-1. The desired Helm configuration changes in Git.
-2. Argo CD detects the changed source revision.
-3. The Application may show `OutOfSync` before reconciliation.
-4. Argo CD synchronizes the Helm resources according to its configured policy.
-5. Kubernetes receives the updated Deployment specification.
-6. The Kubernetes Deployment controller performs the rollout.
-7. Argo CD reports the resulting synchronization and health state.
-
-Automated sync removes the need for a separate manual deployment command for each eligible Git change.
-
-### Self-Healing and Pruning
-
-With self-healing enabled, Argo CD can reconcile supported live-resource changes that differ from the desired state in Git.
-
-With pruning enabled, Argo CD can remove resources it manages when their manifests are removed from its tracked source.
-
-Pruning can be destructive. Persistent storage, database resources, credentials, and other important resources must be managed carefully. Review changes before removing resources from the Git-managed configuration.
+Reconciliation is asynchronous. A successful Jenkins build or Git push does not by itself prove that the new image is running. The Argo CD Application and Kubernetes Deployment must also be checked.
 
 ### GitOps Verification Commands
+
+Inspect the image reference committed to the remote branch:
+
+```bash
+git fetch origin
+git show origin/main:helm/values.yaml
+```
 
 Check the Argo CD Application:
 
@@ -366,125 +395,125 @@ Check the Argo CD Application:
 kubectl get application petclinic -n argocd
 ```
 
-Inspect its detailed conditions:
-
-```bash
-kubectl describe application petclinic -n argocd
-```
-
-Check the desired image tag in Helm values:
-
-```bash
-grep -A 5 '^app:' helm/values.yaml
-```
-
-Inspect the image configured on the Deployment:
-
-```bash
-kubectl get deployment spring-petclinic -n petclinic \
-  -o jsonpath='{.spec.template.spec.containers[*].image}'
-
-echo
-```
-
-The image reference in Git, the Deployment, and the running Pods should agree on the expected version.
-
----
-
-## Kubernetes Rolling Updates
-
-A key demonstrated behavior in this project is the rolling update that follows an image change.
-
-When the Deployment's Pod template changes, Kubernetes manages the replacement of Pods according to the Deployment update strategy and availability settings.
-
-### Observed Rollout Sequence
-
-The captured screenshots show the following sequence:
-
-1. Argo CD detected a change in the Git-managed image configuration.
-2. The Application entered an `OutOfSync` state before synchronization.
-3. Argo CD synchronized the updated Helm configuration.
-4. A new Pod started while the previous Pod running image version `6` was still present.
-5. The previous Pod remained temporarily during the replacement process.
-
-This is consistent with a Kubernetes rolling update. The new Pod must satisfy the configured readiness and availability requirements before the rollout can progress as intended.
-
-### Responsibility of Each Component
-
-**Jenkins** builds and publishes the new image and commits the new image tag to Git.
-
-**Argo CD** detects and reconciles the changed Git-managed desired state.
-
-**Kubernetes Deployment controller** performs the actual rolling update and manages Pod replacement.
-
-This separation is central to the GitOps workflow: Jenkins does not need to directly run `kubectl rollout` to initiate every release when Argo CD is managing the desired state.
-
-### Verify Rollout Completion
+Inspect the Deployment rollout:
 
 ```bash
 kubectl rollout status deployment/spring-petclinic -n petclinic
 ```
 
-Check the Deployment:
+Check the image configured on the Deployment:
 
 ```bash
-kubectl get deployment spring-petclinic -n petclinic
+kubectl get deployment spring-petclinic -n petclinic \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="spring-petclinic")].image}'
+
+echo
 ```
 
-Inspect the Pods:
+Inspect the images and readiness of the running application Pods:
 
 ```bash
 kubectl get pods -n petclinic \
   -o custom-columns='POD:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready'
 ```
 
-A rollout should be considered complete only after the intended new Pods are ready and the Deployment reports the expected availability.
+A complete release validation should confirm the expected image tag in Git, successful synchronization and application health in Argo CD, and running Pods using the expected image.
 
-The captured rollout screenshots demonstrate the observed transition. They do not independently prove zero-downtime availability; that requires an application availability test during the rollout.
+## Docker
 
----
+The application image is defined in [`Docker/Dockerfile`](Docker/Dockerfile).
+
+Docker provides a consistent packaging format for running the application across development and deployment environments.
+
+The image repository used by the pipeline is:
+
+```text
+moamenothman1/spring-petclinic
+```
+
+The pipeline publishes two tags:
+
+- A versioned tag based on the Jenkins build number.
+- The mutable `latest` tag.
+
+The Helm values should use the versioned tag to make the requested application release explicit.
+
+The current image tag should always be verified in [`helm/values.yaml`](helm/values.yaml) rather than assumed from an earlier build.
 
 ## Kubernetes Deployment
 
-The Helm chart defines the application and supporting Kubernetes resources through `helm/templates/`.
+The repository contains two representations of the Kubernetes resources:
 
-The repository also contains corresponding standalone manifests in `k8s/`.
+- `helm/` contains the Helm chart currently tracked by Argo CD.
+- `k8s/` contains standalone Kubernetes manifests for individual resources and the documented manual deployment procedure.
+
+The following resource descriptions apply to the corresponding chart templates and standalone manifests. The Helm chart is the source used by the current automated GitOps release workflow.
+
+### Namespace
+
+The namespace is defined in the chart's `namespace.yaml` template and in [`k8s/namespace.yaml`](k8s/namespace.yaml).
+
+Current namespace:
+
+```text
+petclinic
+```
 
 ### Application Deployment
 
-The Spring PetClinic Deployment manages the application Pods. Its configuration includes the container image, replica settings, ports, health probes, resource requests and limits, and references to application configuration and database credentials.
+The application Deployment is defined in `helm/templates/app-deployment.yaml` and [`k8s/app-deployment.yaml`](k8s/app-deployment.yaml).
 
-The current desired replica count and other settings should be read from the active Helm values and rendered chart rather than assumed from older screenshots.
+The current workload configuration includes:
 
-### Services
+- Two initial application replicas, managed by the HPA.
+- Container port `8080`.
+- CPU and memory requests and limits.
+- Startup, readiness, and liveness probes.
+- Environment configuration from a ConfigMap.
+- Database credentials from a Kubernetes Secret.
+- A versioned Docker image reference maintained through the GitOps release workflow.
 
-Kubernetes Services provide stable networking for the application and database.
+The Deployment controller maintains the desired number of replicas and supports controlled rollouts when the image or Pod template changes.
 
-The application Service provides access to Spring PetClinic through its configured Service port and exposure type.
+### Application Service
 
-The MySQL Service provides internal database discovery at:
+The application Service is defined in `helm/templates/app-service.yaml` and [`k8s/app-service.yaml`](k8s/app-service.yaml).
 
-```text
-mysql:3306
-```
+The configured Service uses port `8080` and NodePort `30080`, enabling access through the configured Kubernetes node networking.
 
-Actual application reachability depends on the configured Service type and the cluster's networking.
+Actual reachability depends on the cluster and host networking configuration.
+
+### Database Service
+
+The database Service is defined in `helm/templates/mysql-service.yaml` and [`k8s/mysql-service.yaml`](k8s/mysql-service.yaml).
+
+The database connection uses the Kubernetes DNS name `mysql` on TCP port `3306`.
 
 ### MySQL StatefulSet
 
-MySQL runs as a StatefulSet with persistent storage. The StatefulSet provides stable workload identity and persistent-volume association for the database.
+The MySQL StatefulSet is defined in `helm/templates/mysql-statefulset.yaml` and [`k8s/mysql-statefulset.yaml`](k8s/mysql-statefulset.yaml).
 
-Database resources should not be deleted casually during application deployment or troubleshooting.
+A StatefulSet is appropriate for workloads that need stable identity and persistent storage configuration.
 
----
+## Application Configuration
+
+Application configuration is defined in `helm/templates/app-configmap.yaml` and [`k8s/app-configmap.yaml`](k8s/app-configmap.yaml).
+
+The current configuration uses the `mysql` Spring profile and a JDBC URL following this format:
+
+```text
+jdbc:mysql://mysql:3306/petclinic
+```
+
+The database name, Service name, port, and active Spring profile must remain consistent with the database and application configuration.
+
+The ConfigMap keeps non-sensitive settings outside the application image, making it possible to adjust deployment configuration independently of the build process.
 
 ## Database and Persistent Storage
 
-The project uses MySQL as a separate workload from the application.
+MySQL uses a PersistentVolumeClaim associated with the StatefulSet.
 
-The database StatefulSet is configured to use persistent storage through a PersistentVolumeClaim.
-
-Previously observed storage configuration:
+The observed database claim has the following configuration:
 
 | Property | Value |
 |---|---|
@@ -493,82 +522,132 @@ Previously observed storage configuration:
 | Access mode | `ReadWriteOnce` |
 | Observed status | `Bound` |
 
-These values describe the previously observed configuration and should be verified against the current cluster.
+Persistent storage helps retain database files when the database Pod is recreated. Actual data retention also depends on the storage provisioner and the PersistentVolume reclaim policy.
 
-Persistent storage helps retain database files when a database Pod is recreated. Data retention also depends on the storage provisioner and the PersistentVolume reclaim policy.
+Persistent volumes are not a replacement for tested database backups. A recovery plan should include backup creation, retention, and restoration testing.
 
-A backup file is present in the repository's `backups/` directory. The backup has not been established as restorable merely by its presence. A reliable recovery process requires a tested restore procedure.
+**Important:** Avoid deleting the MySQL PVC or StatefulSet as a routine troubleshooting step. Verify the storage configuration and back up any data that must be retained before performing destructive operations.
 
----
+## Secrets Management
 
-## Application Configuration and Secrets
+The application uses a Kubernetes Secret named `mysql-secret` in the `petclinic` namespace to provide database credentials to the application and MySQL workload.
 
-Application configuration is maintained separately from the application image.
-
-The application ConfigMap configures the active Spring profile and database connection settings. The current configuration has used the `mysql` profile and a JDBC URL in this format:
-
-```text
-jdbc:mysql://mysql:3306/petclinic
-```
-
-The database credentials are provided through a Kubernetes Secret named `mysql-secret` in the `petclinic` namespace.
-
-The expected keys are:
+The Secret contains the keys expected by the current manifests:
 
 - `username`
 - `password`
 - `root-password`
 
-The ordinary Kubernetes Secret is provisioned separately from the Git-managed chart. A fresh environment must create the required Secret securely before deploying workloads that depend on it.
+The Secret currently exists directly in the Kubernetes cluster. A corresponding Secret manifest is intentionally not stored in the repository.
 
-Do not commit plaintext database credentials, GitHub tokens, Docker Hub passwords, or sensitive database backups.
+### Current Approach
 
-For production use, a dedicated secrets-management solution should handle provisioning, access control, rotation, and recovery.
+- The application consumes credentials through Kubernetes `secretKeyRef` references.
+- Secret values are kept separate from version-controlled application manifests.
+- The Secret is provisioned and maintained separately from the Git-managed Kubernetes resources.
+- The `k8s/mysql-secret.yaml` manifest is not present in the repository.
+- The previously deleted SealedSecret manifest is no longer part of the current Git-managed configuration.
 
----
+This means the current cluster depends on the separately provisioned Secret being present. Cloning the repository and applying the manifests alone will not recreate the database credentials.
 
-## Security and Resource Governance
+### Production Considerations
+
+For a reproducible production deployment, a dedicated secrets-management approach should be established. Possible approaches include External Secrets Operator backed by a secrets manager, or Sealed Secrets configured and validated for the target cluster.
+
+Sensitive credentials must not be committed to Git as plaintext. Base64 encoding is not encryption, and a private repository should not be treated as a secrets manager.
+
+The secret-management solution should define credential rotation, access controls, recovery procedures, and how secrets are provisioned when a new environment is created.
+
+## Security
 
 ### NetworkPolicy
 
-The project includes a NetworkPolicy intended to restrict ingress to MySQL Pods.
+The MySQL ingress policy is defined in `helm/templates/network-policy.yaml` and [`k8s/network-policy.yaml`](k8s/network-policy.yaml).
 
-The policy selects the database Pods and permits TCP traffic on port `3306` from the application Pods selected by its labels.
+The policy selects Pods labelled `app=mysql` and permits inbound TCP traffic on port `3306` from Pods labelled `app=spring-petclinic`.
 
-Effective enforcement depends on the cluster networking implementation supporting NetworkPolicy. The presence of a policy manifest alone does not prove that unauthorized traffic is blocked.
+The policy does not define application ingress or egress restrictions.
 
-### ResourceQuota and LimitRange
+Effective enforcement depends on the cluster's CNI implementation. The existence of a NetworkPolicy resource alone does not guarantee that traffic is filtered; the cluster networking configuration must support enforcement.
 
-The chart includes a ResourceQuota and LimitRange to govern resource consumption in the `petclinic` namespace.
+### Credential and Backup Handling
 
-ResourceQuota can limit aggregate CPU and memory requests and limits, the number of Pods and Services, PersistentVolumeClaims, and requested storage.
+- Store registry credentials in Jenkins Credentials.
+- Keep database credentials outside source-controlled manifests.
+- Do not commit plaintext credentials or secret-bearing backup files.
+- Review database dumps and Kubernetes backups before publishing them.
+- Restrict access to Kubernetes Secrets using appropriate RBAC permissions.
+- Protect backups of cluster configuration and secret-management keys.
+- Use a dedicated secrets-management solution for production deployments.
+- Never put a GitHub Personal Access Token or Docker Hub token directly into the Jenkinsfile.
 
-LimitRange can define container resource defaults, minimums, and maximums.
+## Reliability and Resource Management
 
-These settings must be compatible with the expected number of application replicas and the database workload. An insufficient quota can prevent a rolling update or autoscaling operation from creating additional Pods.
+### Health Probes
+
+The application Deployment defines startup, readiness, and liveness probes.
+
+- **Startup probe:** Allows the application time to start.
+- **Readiness probe:** Controls whether the Pod is considered ready to receive traffic.
+- **Liveness probe:** Helps detect a container that is no longer functioning correctly.
+
+These probes help Kubernetes manage application availability and container recovery, but they do not guarantee that every application failure will be detected.
+
+### Self-Healing
+
+The Deployment controller maintains the desired number of application replicas and replaces Pods when necessary.
+
+Evidence from the implementation is available in [`screenshots/self-healing-watch.png`](screenshots/self-healing-watch.png).
+
+![Kubernetes self-healing](screenshots/self-healing-watch.png)
+
+This demonstrates the captured self-healing scenario; it does not by itself prove resilience to every node or infrastructure failure.
 
 ### PodDisruptionBudget
 
-The project includes a PodDisruptionBudget for application availability during supported voluntary disruptions.
+The PodDisruptionBudget is defined in `helm/templates/app-pdb.yaml` and [`k8s/app-pdb.yaml`](k8s/app-pdb.yaml).
 
-A PDB does not prevent every disruption and does not guarantee availability during unexpected infrastructure failures.
+The configuration includes:
 
-### Production Security Considerations
+```yaml
+spec:
+  minAvailable: 1
+```
 
-- Store registry and source-control credentials in Jenkins Credentials.
-- Keep database credentials outside version-controlled plaintext manifests.
-- Review backup contents before publishing the repository.
-- Restrict access to Kubernetes Secrets using RBAC.
-- Confirm NetworkPolicy enforcement in the target cluster.
-- Use image vulnerability scanning and dependency checks before production deployment.
+The PDB helps limit certain voluntary disruptions from reducing the number of available application Pods below the configured threshold.
 
----
+It does not prevent every disruption and does not guarantee availability during unexpected node failures.
+
+### ResourceQuota
+
+The namespace ResourceQuota is defined in `helm/templates/resource-quota.yaml` and [`k8s/resource-quota.yaml`](k8s/resource-quota.yaml).
+
+The configuration defines namespace-level limits for:
+
+- Aggregate CPU requests and limits.
+- Aggregate memory requests and limits.
+- Number of Pods.
+- Number of Services.
+- Number of PersistentVolumeClaims.
+- Total requested persistent storage.
+
+The updated quota was validated using a Kubernetes server-side dry run and then applied successfully.
+
+The quota must be sized to accommodate the configured application replicas, database workload, and other Pods in the namespace.
+
+### LimitRange
+
+The LimitRange is defined in `helm/templates/limit-range.yaml` and [`k8s/limit-range.yaml`](k8s/limit-range.yaml).
+
+It defines minimum and maximum container resources along with default requests and limits.
+
+These defaults apply to new containers that omit explicit resource settings. They do not replace resource values already specified in a Pod or Deployment manifest.
 
 ## Horizontal Pod Autoscaling
 
-The project includes a Horizontal Pod Autoscaler configured for the application Deployment.
+The Horizontal Pod Autoscaler is defined in `helm/templates/app-hpa.yaml` and [`k8s/app-hpa.yaml`](k8s/app-hpa.yaml).
 
-Previously documented HPA settings:
+### Configuration
 
 | Setting | Value |
 |---|---|
@@ -578,156 +657,216 @@ Previously documented HPA settings:
 | Minimum replicas | 2 |
 | Maximum replicas | 4 |
 
-Verify the current settings in `helm/values.yaml` and the rendered chart before reproducing the test.
+The HPA uses CPU metrics to adjust the Deployment's replica count. It depends on a working metrics pipeline and sufficient namespace quota and cluster capacity.
 
 ### Load Test
 
-The load generator is defined in [`tests/hpa-load-generator.yaml`](tests/hpa-load-generator.yaml).
+A temporary load-generator Pod defined in [`tests/hpa-load-generator.yaml`](tests/hpa-load-generator.yaml) sent repeated HTTP requests to the application Service.
 
-Previously captured observations showed the application scaling from two replicas to four under generated HTTP load and subsequently scaling down after the load generator was stopped.
+The HPA watch captured the following progression:
 
-The recorded CPU utilization was measured relative to CPU requests, not as a percentage of total host CPU utilization.
+| Observed CPU utilization | Replica count | Observation |
+|---:|---:|---|
+| 2% | 2 | Baseline before load |
+| 94% | 2 → 3 | Scale-up began |
+| 150% | 3 → 4 | Further scale-up |
+| 84%–100% | 4 | Maximum replica count reached |
 
-These observations demonstrate HPA behavior in the local Minikube environment under the tested workload. They are not a production performance benchmark and do not establish maximum throughput or supported user capacity.
+After the load generator was stopped, the application scaled down again.
 
-### Monitor Autoscaling
+**Verified outcome:** The local Minikube environment successfully scaled the application from two replicas to four under generated HTTP load and subsequently scaled down after the load was removed.
 
-```bash
-kubectl get hpa -n petclinic
-kubectl describe hpa spring-petclinic -n petclinic
-kubectl top pods -n petclinic
-kubectl get pods -n petclinic --watch
-```
+The CPU utilization values are measured relative to the containers' CPU requests, not the total CPU utilization of the host machine.
 
-Run the load generator:
+This test demonstrates HPA behavior under the specific local workload. It is not a production performance benchmark and does not establish maximum throughput, latency, or user capacity.
 
-```bash
-kubectl apply -f tests/hpa-load-generator.yaml
-```
+### Autoscaling Evidence
 
-After the test, stop the load generator:
+**HPA metrics and replica changes**
 
-```bash
-kubectl delete -f tests/hpa-load-generator.yaml
-```
+![HPA metrics and replica changes](screenshots/auto-scaling-hpa-watch.png)
 
-Observe the HPA and Pod count to verify scale-up and scale-down behavior.
+**Pod count during autoscaling**
 
----
+![Pods during autoscaling](screenshots/auto-scaling-pods-watch.png)
 
-## Self-Healing and Rollback
+**Scale-down after load removal**
 
-### Self-Healing
+![HPA scale-down evidence](screenshots/scaledown.png)
 
-Kubernetes controllers maintain the desired workload state and can replace failed or deleted application Pods.
+## Argo CD and GitOps
 
-Argo CD self-healing reconciles supported live-resource drift against the Git-managed desired state.
+Argo CD manages the desired state of the PetClinic Kubernetes resources from Git.
 
-These are related but distinct behaviors: Kubernetes maintains workload replicas, while Argo CD reconciles the cluster against the declared configuration in Git.
+The Argo CD Application manifest is stored in [`ArgoCD/petclinic-application.yaml`](ArgoCD/petclinic-application.yaml).
 
-Evidence of the captured self-healing scenario is available in [`screenshots/self-healing-watch.png`](screenshots/self-healing-watch.png).
+### Application Configuration
 
-### Rollback
+The Application points to the GitHub repository and uses the `helm/` directory as its source path.
 
-The repository includes a rollback screenshot at [`screenshots/rollback.png`](screenshots/rollback.png).
+| Setting | Configuration |
+|---|---|
+| Application name | `petclinic` |
+| Argo CD namespace | `argocd` |
+| Git branch | `main` |
+| Manifest path | `helm/` |
+| Destination namespace | `petclinic` |
+| Automated sync | Enabled |
+| Self-healing | Enabled |
+| Pruning | Enabled |
 
-A rollback must be interpreted in the context of the operation that was captured. A direct Kubernetes rollback and a GitOps rollback are not identical.
+The Application uses automated synchronization with `selfHeal: true` and `prune: true`.
 
-For the GitOps workflow, the preferred controlled approach is to restore the previous known-good image tag in the Git-managed Helm values and allow Argo CD to reconcile that desired state. This keeps Git consistent with the intended running version.
+### Automated Synchronization
 
-A rollback is complete only after the previous image is running, the Pods are ready, and the Argo CD Application has reached the expected synchronization and health states.
+Automated synchronization allows Argo CD to apply eligible changes from the Git-managed desired state without requiring a manual sync for each change.
 
----
+The self-healing configuration allows Argo CD to reconcile supported live-resource changes that differ from the desired state in Git.
 
-## Screenshots and Evidence
+The default reconciliation interval can vary with Argo CD configuration. A webhook can also be configured to notify Argo CD of repository changes.
 
-The `screenshots/` directory contains evidence captured during pipeline execution and Kubernetes operations.
+### Observed Helm Values Update and Rollout
 
-### Jenkins Build and Image Delivery
+During the successful release documented in the screenshots, Jenkins updated the image tag in `helm/values.yaml` and pushed the change to GitHub.
 
-**Initial pipeline build and Docker image creation**
+Argo CD then detected that the desired state in Git differed from the currently applied state and displayed the Application as `OutOfSync`.
 
-![Initial pipeline build](screenshots/1st-pipeline-buid-test-and-build-docker-image.png)
+After reconciliation, Argo CD synchronized the Helm chart. During the rollout, a new application Pod appeared while an existing Pod was still running. The Deployment controller gradually replaced the old Pods as the new version became ready.
+
+This behavior is the expected distinction between GitOps reconciliation and a Kubernetes rolling update:
+
+- **Jenkins** builds and publishes the image, then updates the image tag in Git.
+- **Argo CD** detects the Git change and reconciles the desired state.
+- **Kubernetes Deployment** performs the rolling update and manages the replacement of Pods.
+- **Readiness probes** help determine whether new Pods are ready to receive traffic.
+
+Argo CD does not itself implement the Pod-by-Pod rolling update. It applies the desired configuration, and Kubernetes controllers carry out the rollout.
+
+### Pruning and Resource Lifecycle
+
+With `prune: true`, Argo CD can delete resources it manages when their manifests are removed from the tracked Git source.
+
+This behavior was relevant during the SealedSecret troubleshooting process: after the SealedSecret manifest was removed from Git and pruning was enabled, the old SealedSecret resource was removed from the cluster, while the separately existing ordinary Kubernetes Secret remained available.
+
+This outcome was verified in the current cluster. It should not be interpreted as a guarantee that pruning will always preserve a same-named Secret; resource ownership and controller behavior matter.
+
+Pruning is a potentially destructive operation. Changes to tracked manifests should be reviewed carefully, particularly for persistent data, credentials, and resources that are not intended to be deleted automatically.
+
+### Secrets and GitOps Scope
+
+The current Argo CD Application tracks the `helm/` directory. The ordinary `mysql-secret` is not defined by a manifest in the tracked Helm chart and is maintained separately from Argo CD's Git-managed resources.
+
+Consequently, Argo CD does not provide complete lifecycle management for that Secret. A fresh environment requires a separate, secure process to provision the database credentials before the workloads that depend on them can operate successfully.
+
+### Verification Evidence
+
+**Argo CD detects the changed Helm values**
+
+![Argo CD detects the changed image configuration](screenshots/ArgoCD-detect-changes-in-variables-outofsync.png)
+
+**Argo CD synchronization and rollout**
+
+![Argo CD synchronization and rolling update](<screenshots/ArgoCD-synced-to helm-and-doing-rollout-updates .png>)
+
+**Argo CD Application — Synced and Healthy**
+
+![Argo CD Application — Synced and Healthy](screenshots/ArgoCD-healthy-synced.png)
+
+These screenshots record the Application state at the time they were captured. Current synchronization and health should be checked in the cluster when reproducing the project.
+
+## Pipeline Evidence
+
+The `screenshots/` directory contains evidence of pipeline execution, image publishing, GitOps values updates, Argo CD reconciliation, and Kubernetes operations.
+
+### Build and Image Delivery
+
+**Initial pipeline build, tests, and Docker image creation**
+
+![Initial pipeline build and Docker image creation](screenshots/1st-pipeline-buid-test-and-build-docker-image.png)
 
 **Initial pipeline stages**
 
 ![Initial pipeline stages](screenshots/1st-pipeline-stages.png)
 
-**Docker image publishing**
+**Pipeline stages and Docker image publishing**
 
-![Docker image publishing](screenshots/pipeline-stages-push-docker-image.png)
+![Pipeline stages and image publishing](screenshots/pipeline-stages-push-docker-image.png)
 
-**Pipeline stages including the deployment configuration update**
+### GitOps Values Update
 
-![Pipeline stages and manifest update](screenshots/pileline-stages-success-update-manifast.png)
+**Pipeline stages changing the image tag in Helm values**
 
-### GitOps Image Update
+![Pipeline stages changing the image tag in Helm values](screenshots/pipeline-stages-changing-imgae-tag-in-hem-variables.png)
 
-**Jenkins commit updating deployment configuration**
+**Jenkins commit updating the Helm values**
 
-![Jenkins commit updating deployment configuration](screenshots/jenkins-commit-updated-manifest.png)
+![Jenkins commit updating the Helm values](screenshots/jenkins-commit-in-variables-file.png)
 
-**Argo CD detects a change in the image configuration**
+**Pipeline stages completing the GitOps update**
 
-![Argo CD detects a configuration change](screenshots/ArgoCD-detect-changes-in-variables-outofsync.png)
+![Pipeline stages with successful values update](screenshots/pileline-stages-success-update-manifast.png)
 
-**Argo CD synchronization and rolling update in progress**
+**GitHub commit showing the updated configuration**
 
-![Argo CD synchronization and rolling update](<screenshots/ArgoCD-synced-to helm-and-doing-rollout-updates .png>)
+![Jenkins commit updating the Git-managed configuration](screenshots/jenkins-commit-updated-manifest.png)
 
-**Argo CD synchronized and healthy**
+### Argo CD Reconciliation
 
-![Argo CD healthy and synchronized](screenshots/ArgoCD-healthy-synced.png)
+**Argo CD detects the new desired state**
 
-**Application synchronized after a new build**
+![Argo CD detects changes](screenshots/ArgoCD-detect-changes-in-variables-outofsync.png)
 
-![Application synchronized after a new build](screenshots/app-synced-after-new-build.png)
+**Argo CD synchronized after the new build**
+
+![Argo CD application synchronized after the new build](screenshots/app-synced-after-new-build.png)
+
+**Argo CD reaches the Healthy and Synced state**
+
+![Argo CD healthy and synced](screenshots/ArgoCD-healthy-synced.png)
+
+The screenshots document the observed GitOps workflow. For a release to be considered validated, the commit, Argo CD state, and running Kubernetes image should agree on the expected version.
 
 ### Kubernetes Operations
 
-**Rolling update**
+**Deployment rollout**
 
-![Kubernetes rollout evidence](screenshots/rollout.png)
+![Kubernetes rollout](screenshots/rollout.png)
 
-**Rollback**
+**Rolling update during Argo CD reconciliation**
 
-![Kubernetes rollback evidence](screenshots/rollback.png)
+![Kubernetes rolling update during Argo CD reconciliation](<screenshots/ArgoCD-synced-to helm-and-doing-rollout-updates .png>)
 
-**Self-healing**
+**Rollback demonstration**
 
-![Kubernetes self-healing evidence](screenshots/self-healing-watch.png)
+![Kubernetes rollback](screenshots/rollback.png)
 
-### Autoscaling
+**Self-healing demonstration**
 
-**HPA metrics**
+![Kubernetes self-healing](screenshots/self-healing-watch.png)
 
-![HPA metrics and scaling](screenshots/auto-scaling-hpa-watch.png)
-
-**Pod scaling**
-
-![Pod scaling during load](screenshots/auto-scaling-pods-watch.png)
-
-**Scale-down**
-
-![Scale-down after load removal](screenshots/scaledown.png)
-
-Screenshots document the state visible at capture time. Current release status should always be verified from Jenkins, Git, Argo CD, and Kubernetes.
-
----
+These screenshots provide supporting evidence of the activities captured during the project. Current workload status should be checked directly in the target cluster.
 
 ## Deployment and Verification
 
+This section describes the standalone Kubernetes manifest workflow using `k8s/`. It is separate from the automated GitOps release path, which uses the Helm chart in `helm/`.
+
+When using Argo CD, changes to the tracked Helm chart should be committed to Git and reconciled by Argo CD rather than applying conflicting standalone manifests over the same resources.
+
 ### Prerequisites
 
-- Git
+Install and configure:
+
 - Docker
 - `kubectl`
 - Minikube or another Kubernetes cluster
-- Jenkins with Docker access and the required credentials
-- Argo CD
-- Helm support in the deployment environment
-- A suitable StorageClass for MySQL persistent storage
-- Secure provisioning of the `mysql-secret` Secret
+- Git
+- Jenkins and the required build tools, if running the pipeline
+- Helm, if working with the chart locally
+- Argo CD, if using GitOps synchronization
+
+Ensure the cluster has sufficient resources and a working StorageClass for the MySQL persistent volume.
+
+The database credentials must be provisioned separately because the repository does not currently include a Secret manifest.
 
 ### 1. Clone the Repository
 
@@ -745,170 +884,263 @@ kubectl get nodes
 
 Confirm that the commands target the intended development cluster.
 
-### 3. Inspect the Helm Configuration
+### 3. Create the Namespace
 
 ```bash
-cat helm/values.yaml
-cat ArgoCD/petclinic-application.yaml
+kubectl apply -f k8s/namespace.yaml
 ```
 
-Review the image repository, image tag, namespace, and Argo CD source path before applying changes.
+### 4. Apply Application Configuration
 
-### 4. Check the Argo CD Application
+```bash
+kubectl apply -f k8s/app-configmap.yaml
+```
+
+### 5. Provision the Database Secret
+
+Before deploying MySQL, provision the `mysql-secret` Secret in the `petclinic` namespace using an approved secure method.
+
+The Secret must contain these keys:
+
+- `username`
+- `password`
+- `root-password`
+
+Do not attempt to apply `k8s/mysql-secret.yaml`; that file is not present in the current repository.
+
+Do not place actual credentials in shell history, source-controlled files, or public documentation. Use an appropriate secure provisioning process for the target environment.
+
+### 6. Deploy MySQL
+
+```bash
+kubectl apply -f k8s/mysql-service.yaml
+kubectl apply -f k8s/mysql-statefulset.yaml
+```
+
+Wait for the database Pod to become ready before relying on application connectivity.
+
+### 7. Deploy the Application
+
+```bash
+kubectl apply -f k8s/app-service.yaml
+kubectl apply -f k8s/app-deployment.yaml
+```
+
+### 8. Apply Resource and Availability Controls
+
+```bash
+kubectl apply -f k8s/resource-quota.yaml
+kubectl apply -f k8s/limit-range.yaml
+kubectl apply -f k8s/app-pdb.yaml
+kubectl apply -f k8s/app-hpa.yaml
+```
+
+Ensure the namespace quota permits the intended workload and that Metrics Server is available before relying on HPA decisions.
+
+### 9. Apply the NetworkPolicy
+
+```bash
+kubectl apply -f k8s/network-policy.yaml
+```
+
+### 10. Verify the Workloads
+
+```bash
+kubectl get pods -n petclinic
+kubectl get services -n petclinic
+kubectl get pvc -n petclinic
+kubectl get networkpolicy -n petclinic
+kubectl get hpa -n petclinic
+kubectl get pdb -n petclinic
+kubectl get resourcequota -n petclinic
+kubectl get limitrange -n petclinic
+kubectl get secret mysql-secret -n petclinic
+```
+
+The last command displays Secret metadata, not its stored credential values.
+
+Inspect rollout status and application logs:
+
+```bash
+kubectl rollout status deployment/spring-petclinic -n petclinic
+kubectl rollout status statefulset/mysql -n petclinic
+kubectl logs deployment/spring-petclinic -n petclinic --tail=80
+```
+
+To verify NetworkPolicy behavior, test permitted application-to-database traffic and an unauthorized connection attempt. Confirm that the CNI enforces NetworkPolicy rules before treating the restriction as a validated security control.
+
+### 11. Monitor Autoscaling
+
+```bash
+kubectl top pods -n petclinic
+kubectl describe hpa spring-petclinic -n petclinic
+kubectl get hpa spring-petclinic -n petclinic --watch
+```
+
+To run the load test:
+
+```bash
+kubectl apply -f tests/hpa-load-generator.yaml
+```
+
+After the test, stop the load generator:
+
+```bash
+kubectl delete -f tests/hpa-load-generator.yaml
+```
+
+Monitor the HPA and Deployment to observe scale-down behavior. The test manifest can be retained for future repeatable validation.
+
+### 12. Verify Argo CD
+
+Check the Application's synchronization and health:
 
 ```bash
 kubectl get application petclinic -n argocd
+```
+
+Inspect Application conditions and resource status:
+
+```bash
 kubectl describe application petclinic -n argocd
 ```
 
-Confirm the source repository, branch, Helm path, destination namespace, sync policy, and health status.
+The Application should be reviewed for both synchronization status and health status. A synchronized Application is not necessarily healthy, and a healthy workload does not by itself mean that all resources are synchronized with Git.
 
-### 5. Verify the Deployment
+### 13. Verify the GitOps Release
+
+After a Jenkins build completes, fetch the latest remote state:
 
 ```bash
-kubectl get deployment spring-petclinic -n petclinic
-kubectl rollout status deployment/spring-petclinic -n petclinic
-kubectl get pods -n petclinic
+git fetch origin
+git show origin/main:helm/values.yaml
 ```
 
-### 6. Verify the Running Image
+Check the Deployment image:
 
 ```bash
 kubectl get deployment spring-petclinic -n petclinic \
-  -o jsonpath='{.spec.template.spec.containers[*].image}'
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="spring-petclinic")].image}'
 
 echo
 ```
 
-List the Pod images and readiness:
+Check the Pods:
 
 ```bash
 kubectl get pods -n petclinic \
   -o custom-columns='POD:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready'
 ```
 
-### 7. Verify Database and Storage Resources
+Confirm that the image tag in Git matches the Deployment and running Pods. Also confirm that the Argo CD Application is synchronized and healthy.
+
+If the values change but Argo CD does not reconcile them, inspect the Application's repository, branch, source path, sync policy, and events before attempting a manual sync.
+
+### Optional: Validate the Helm Chart
+
+You can validate the chart locally before committing changes:
 
 ```bash
-kubectl get statefulset,service,pvc -n petclinic
-kubectl get pods -n petclinic
+helm lint ./helm
+helm template petclinic ./helm
 ```
 
-Do not delete database PVCs or persistent volumes as part of routine application rollout testing.
-
-### 8. Verify Autoscaling and Resource Controls
-
-```bash
-kubectl get hpa,pdb,resourcequota,limitrange -n petclinic
-kubectl top pods -n petclinic
-```
-
-Metrics availability and namespace quota can affect scaling and rolling update behavior.
-
-### 9. Validate a New Release
-
-For a new Jenkins build:
-
-1. Confirm the Maven verification and packaging stage succeeds.
-2. Confirm Docker image build and push succeed.
-3. Confirm Jenkins commits the expected tag to `helm/values.yaml`.
-4. Confirm Argo CD detects and reconciles the change.
-5. Confirm the Deployment rolls out the expected image.
-6. Confirm the new Pods are ready.
-7. Confirm the Argo CD Application reaches the expected synchronized and healthy state.
-
-A successful Jenkins build alone does not prove that the new version is running in Kubernetes.
-
----
+These commands validate chart structure and render the Kubernetes resources locally. They do not deploy the chart or prove that the resulting application is healthy.
 
 ## Troubleshooting
 
-The troubleshooting log and related screenshots are maintained in [`troubleshooting/README.md`](troubleshooting/README.md).
+Troubleshooting notes and related evidence are maintained in [`troubleshooting/README.md`](troubleshooting/README.md).
 
-Each issue should document:
+The troubleshooting record should capture:
 
-- Symptoms and relevant logs.
+- Symptoms and relevant error messages.
 - Root cause, when established.
 - Fixes attempted.
-- Validation steps.
-- Final observed outcome.
-- Evidence screenshots.
+- Validation steps and observed results.
+- Screenshots or logs supporting the final outcome.
+
+Only verified results should be marked as resolved.
 
 ### Jenkins Workspace Permissions
 
-The Maven build runs inside a container with the application source bind-mounted from the Jenkins workspace.
+The Maven build runs inside a Docker container with the application directory bind-mounted from the Jenkins workspace. Build artifacts created with root ownership can cause permission errors in subsequent Jenkins steps.
 
-Build artifacts created with root ownership can cause permission problems in later pipeline stages. The current pipeline uses a shell trap to attempt to restore ownership of the Maven `target` directory to the Jenkins user and group.
+The pipeline includes a shell `trap` intended to restore ownership of the Maven `target` directory to UID `105` and GID `108` when the container process exits.
 
-The pipeline's successful run after the Maven Wrapper invocation change provides evidence that the tested run completed. Subsequent builds should still be checked for workspace cleanup and checkout behavior.
+The fix was followed by a successful pipeline execution. The captured evidence documents the successful build workflow, image publishing, and GitOps values update. Further consecutive builds should be used to confirm repeatability and ensure that workspace cleanup continues to work as expected.
 
-### GitOps Manifest Update Failures
+### GitOps Values Push Failures
 
-If the Helm values update or Git push fails:
+If the values-update stage fails:
 
-1. Confirm that `helm/values.yaml` exists in the checked-out DevOps repository.
-2. Verify that `app.image.tag` was updated to the expected Jenkins build number.
-3. Check the Git diff and commit output.
-4. Confirm that the Jenkins GitHub credential has repository write permission.
-5. Inspect the push error and remote branch state.
-6. Verify that the Argo CD Application tracks `helm/` on the intended branch.
+1. Confirm that the Jenkins credential ID `github` exists and is available to the job.
+2. Confirm that its token has permission to write repository contents.
+3. Check whether the workspace is checked out on the intended branch.
+4. Inspect the Git push error and remote branch state.
+5. Confirm that the expected image tag can be updated in `helm/values.yaml`.
+6. Resolve branch divergence safely; do not use a force push as a routine fix.
 
-Do not use force-push as a routine fix for branch divergence.
+A successful Docker image push does not mean that the GitOps values update succeeded. Review the Jenkins stage results separately.
 
-### Argo CD Sync or Health Problems
+### Argo CD Sync and Health
 
-If the Git configuration changes but the Application does not reach the expected state, inspect:
+If the Helm values are updated in Git but the Application does not become synchronized or healthy, inspect:
 
-- Repository, branch, and chart path.
-- Application synchronization policy.
-- Application conditions and Kubernetes events.
-- Helm rendering and resource configuration.
-- Image pull errors and container logs.
-- Database credentials and persistent-volume status.
-- Namespace quotas and available cluster capacity.
+- The Argo CD Application source repository, branch, and path.
+- The sync policy and Application conditions.
+- The desired image tag in `helm/values.yaml`.
+- The rendered Helm resources.
+- The image pull status and container logs.
+- The status of the database Secret and persistent volume.
+- Kubernetes events for the affected resources.
 
-A `Synced` state does not necessarily mean that the workload is healthy. Check both synchronization and health.
+Troubleshooting evidence should be added to the `troubleshooting/` directory when new issues are encountered.
 
-### Rolling Update Problems
+### Rolling Update Behavior
 
-If the old Pod remains after a new image is committed:
+When a new Pod appears while an old Pod is still running, this can be normal Deployment rolling-update behavior.
+
+The Deployment controller attempts to replace Pods gradually according to the rollout strategy and readiness status. The exact number of simultaneously running Pods depends on the Deployment strategy, `maxSurge`, `maxUnavailable`, available resources, and readiness of the new Pods.
+
+Argo CD reconciles the desired configuration; it does not directly manage the individual Pod replacement sequence.
+
+Verify the rollout using:
 
 ```bash
 kubectl rollout status deployment/spring-petclinic -n petclinic
+kubectl get deployment spring-petclinic -n petclinic
+kubectl get pods -n petclinic -o wide
 kubectl describe deployment spring-petclinic -n petclinic
-kubectl get pods -n petclinic
-kubectl get events -n petclinic --sort-by=.lastTimestamp
 ```
 
-Inspect readiness probe failures, image pull errors, resource constraints, and Deployment rollout conditions before deleting Pods manually.
-
----
+Do not assume a rollout is complete merely because Argo CD reports that synchronization has started. Confirm the Deployment and Pod status.
 
 ## Future Improvements
 
-Potential enhancements include:
+Potential future enhancements include:
 
-- Automated build triggers with safe filtering.
-- Multi-environment release promotion.
-- Secure secret lifecycle management.
-- Prometheus and Grafana dashboards.
-- Centralized application and infrastructure logging.
-- Container image vulnerability scanning.
-- Dependency and software composition analysis.
-- Additional NetworkPolicy restrictions after validating traffic flows.
-- Database backup and restore testing.
-- Cloud deployment to a managed Kubernetes service.
-- Automated verification that the deployed image matches the Git-managed tag.
-- A documented and repeatable GitOps rollback procedure.
+- Automated builds triggered by source-control changes with safe trigger filtering.
+- Explicit release promotion between environments.
+- Helm chart validation and automated testing in the CI pipeline.
+- A fully reproducible GitOps workflow for multiple environments.
+- Secure Secret lifecycle management using External Secrets Operator or correctly configured Sealed Secrets.
+- Metrics and dashboards with Prometheus and Grafana.
+- Centralized log collection.
+- Additional NetworkPolicy rules after mapping required traffic flows.
+- Database backup and restore validation.
+- Deployment security scanning and image vulnerability assessment.
+- Cloud deployment using a managed Kubernetes service.
+- A controlled rollback process that updates the Git-managed desired state as well as the running Deployment.
+- Automated validation that the deployed image matches the version recorded in Git.
+- Automated verification that the application remains healthy after each release.
+- Documentation of tested resource requirements and repeatable deployment procedures.
 
-These are potential improvements, not claims that all of them are already implemented.
-
----
+These are potential extensions, not claims that the corresponding features are already implemented.
 
 ## Author
 
 **Mo'men Othman**
 
 - GitHub: [moamenothman](https://github.com/moamenothman)
-- Project repository: [spring-petclinic-DevOps](https://github.com/moamenothman/spring-petclinic-DevOps)
+- Project: [spring-petclinic-DevOps](https://github.com/moamenothman/spring-petclinic-DevOps)
 
