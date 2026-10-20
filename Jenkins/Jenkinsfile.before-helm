@@ -1,0 +1,210 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        APP_REPO = 'https://github.com/moamenothman/spring-petclinic.git'
+        APP_DIR = 'app-src'
+
+        DOCKERHUB_NAMESPACE = 'moamenothman1'
+        IMAGE_NAME = 'spring-petclinic'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout DevOps Repository') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Checkout Application') {
+            steps {
+                sh '''
+                    rm -rf "$APP_DIR"
+                    git clone --depth 1 "$APP_REPO" "$APP_DIR"
+                '''
+            }
+        }
+
+        stage('Test and Package') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -v "$WORKSPACE/$APP_DIR:/workspace" \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -w /workspace \
+                      maven:3.9.16-eclipse-temurin-17 \
+                      bash -lc '
+                        trap "if [ -d /workspace/target ]; then chown -R 105:108 /workspace/target || true; fi" EXIT
+
+                        set -e
+                        apt-get update
+                        apt-get install -y docker.io curl
+
+                        mkdir -p /usr/local/lib/docker/cli-plugins
+                        curl -fsSL \
+                          https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64 \
+                          -o /usr/local/lib/docker/cli-plugins/docker-compose
+                        chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+                        java -version
+                        docker version
+                        docker compose version
+
+                        chmod +x ./mvnw
+                        ./mvnw -B verify
+                      '
+                '''
+            }
+        }
+
+        stage('Prepare Docker Context') {
+            steps {
+                sh '''
+                    test -f "$WORKSPACE/$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar"
+
+                    rm -rf image-context
+                    mkdir -p image-context
+
+                    cp Docker/Dockerfile image-context/Dockerfile
+                    cp "$APP_DIR/target/spring-petclinic-4.0.0-SNAPSHOT.jar" image-context/app.jar
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    docker build \
+                      -t "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG" \
+                      -t "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest" \
+                      image-context
+                '''
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+
+                        export DOCKER_CONFIG="$WORKSPACE/.docker-config"
+                        mkdir -p "$DOCKER_CONFIG"
+
+                        printf '%s' "$DOCKERHUB_TOKEN" |
+                          docker login \
+                            --username "$DOCKERHUB_USERNAME" \
+                            --password-stdin
+
+                        docker push \
+                          "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG"
+
+                        docker push \
+                          "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest"
+
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Update Deployment Image in Git') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github',
+                        usernameVariable: 'GIT_USERNAME',
+                        passwordVariable: 'GIT_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        MANIFEST="k8s/app-deployment.yaml"
+                        NEW_IMAGE="$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG"
+
+                        test -f "$MANIFEST"
+
+                        grep -qE '^[[:space:]]*image:[[:space:]]*moamenothman1/spring-petclinic:' "$MANIFEST" || {
+                            echo "ERROR: Expected application image line was not found."
+                            exit 1
+                        }
+
+                        sed -i -E \
+                          "s#(^[[:space:]]*image:[[:space:]]*)moamenothman1/spring-petclinic:[^[:space:]]+#\\1$NEW_IMAGE#" \
+                          "$MANIFEST"
+
+                        echo "Updated manifest image:"
+                        grep -E '^[[:space:]]*image:' "$MANIFEST"
+
+                        git config user.name "Jenkins"
+                        git config user.email "jenkins@users.noreply.github.com"
+
+                        git add "$MANIFEST"
+
+                        if git diff --cached --quiet; then
+                            echo "No manifest changes to commit."
+                            exit 0
+                        fi
+
+                        git commit -m "jenkins updated the build number after successful build"
+
+                        cat > "$WORKSPACE/.git-askpass.sh" <<'ASKPASS'
+#!/bin/sh
+case "$1" in
+    *Username*) printf '%s\\n' "$GIT_USERNAME" ;;
+    *Password*) printf '%s\\n' "$GIT_PASSWORD" ;;
+    *) exit 1 ;;
+esac
+ASKPASS
+
+                        chmod 700 "$WORKSPACE/.git-askpass.sh"
+                        export GIT_ASKPASS="$WORKSPACE/.git-askpass.sh"
+                        export GIT_TERMINAL_PROMPT=0
+
+                        git push origin HEAD:main
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker image rm \
+                  "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG" \
+                  "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest" \
+                  || true
+
+                rm -rf image-context
+                rm -rf .docker-config
+                rm -f .git-askpass.sh
+            '''
+
+            echo 'Pipeline finished. Review the stage results above.'
+        }
+
+        success {
+            echo 'Tests, packaging, Docker build, image publishing, and GitOps manifest update succeeded.'
+        }
+
+        failure {
+            echo 'Pipeline failed. Review the failed stage before retrying.'
+        }
+    }
+}
