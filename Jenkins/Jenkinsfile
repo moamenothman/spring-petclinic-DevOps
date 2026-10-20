@@ -26,7 +26,6 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-
                     rm -rf "$APP_DIR"
                     git clone "$APP_REPO" "$APP_DIR"
                 '''
@@ -54,7 +53,6 @@ pipeline {
                           -o /usr/local/bin/docker-compose
 
                         chmod +x /usr/local/bin/docker-compose
-
                         ./mvnw -B verify
                       '
                 '''
@@ -112,8 +110,6 @@ pipeline {
                         export DOCKER_CONFIG="$WORKSPACE/.docker-config"
                         mkdir -p "$DOCKER_CONFIG"
 
-                        trap 'docker logout || true' EXIT
-
                         printf '%s' "$DOCKERHUB_PASSWORD" |
                           docker login \
                             --username "$DOCKERHUB_USERNAME" \
@@ -121,6 +117,8 @@ pipeline {
 
                         docker push "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:$IMAGE_TAG"
                         docker push "$DOCKERHUB_NAMESPACE/$IMAGE_NAME:latest"
+
+                        docker logout
                     '''
                 }
             }
@@ -140,75 +138,21 @@ pipeline {
                         set +x
 
                         VALUES_FILE="helm/values.yaml"
-
                         test -f "$VALUES_FILE"
 
-                        # Update only app.image.tag, preserving the rest
-                        # of the Helm values file and its formatting.
-                        python3 - "$VALUES_FILE" "$IMAGE_TAG" <<'PYTHON'
-import re
-import sys
-from pathlib import Path
+                        # Update only the tag inside app.image.
+                        sed -i '/^app:/,/^[^ ]/{
+                            /^  image:/,/^  [^ ]/{
+                                s/^\([[:space:]]*tag:[[:space:]]*\)"[^"]*"/\1"'"$IMAGE_TAG"'"/
+                            }
+                        }' "$VALUES_FILE"
 
-path = Path(sys.argv[1])
-new_tag = sys.argv[2]
+                        # Fail unless the intended image tag was updated.
+                        grep -A 4 '^  image:' "$VALUES_FILE" |
+                          grep -Fq "tag: \\"$IMAGE_TAG\\""
 
-if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", new_tag):
-    raise SystemExit("ERROR: Invalid image tag.")
-
-lines = path.read_text().splitlines(keepends=True)
-
-app_indent = None
-image_indent = None
-tag_index = None
-
-for i, line in enumerate(lines):
-    if not line.strip() or line.lstrip().startswith("#"):
-        continue
-
-    indent = len(line) - len(line.lstrip(" "))
-    stripped = line.strip()
-
-    if indent == 0 and re.match(r"^app\\s*:", stripped):
-        app_indent = indent
-        image_indent = None
-        continue
-
-    if app_indent is not None and indent == 0:
-        app_indent = None
-        image_indent = None
-
-    if app_indent is None:
-        continue
-
-    if indent == 2 and re.match(r"^image\\s*:", stripped):
-        image_indent = indent
-        continue
-
-    if indent <= 2 and not re.match(r"^image\\s*:", stripped):
-        if indent == 2:
-            image_indent = None
-
-    if image_indent is not None and indent == 4:
-        match = re.match(r"^\\s*tag\\s*:\\s*(.*?)\\s*(#.*)?$", line.rstrip("\\r\\n"))
-        if match:
-            tag_index = i
-            newline = "\\r\\n" if line.endswith("\\r\\n") else (
-                "\\n" if line.endswith("\\n") else ""
-            )
-            comment = f" {match.group(2)}" if match.group(2) else ""
-            lines[i] = f'    tag: "{new_tag}"{comment}{newline}'
-            break
-
-if tag_index is None:
-    raise SystemExit("ERROR: Could not find app.image.tag in Helm values.")
-
-path.write_text("".join(lines))
-print(f"Updated app.image.tag to {new_tag} in {path}")
-PYTHON
-
-                        echo "Updated Helm image tag:"
-                        grep -n -A 5 -B 3 'tag:' "$VALUES_FILE"
+                        echo "Updated Helm image configuration:"
+                        grep -A 4 '^  image:' "$VALUES_FILE"
 
                         git config user.name "Jenkins"
                         git config user.email "jenkins@users.noreply.github.com"
