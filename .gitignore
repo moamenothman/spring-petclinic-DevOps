@@ -1,3 +1,10 @@
 
 # Local Kubernetes backups - may contain sensitive data
 backups/
+
+# Terraform generated files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log

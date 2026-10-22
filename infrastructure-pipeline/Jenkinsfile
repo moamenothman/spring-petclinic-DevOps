@@ -1,0 +1,77 @@
+pipeline {
+    agent {
+        label 'infrastructure'
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        TF_IN_AUTOMATION = 'true'
+        TF_INPUT = 'false'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Preflight Checks') {
+            steps {
+                sh '''
+                    set -eu
+                    echo "=== Agent ==="
+                    whoami
+                    echo "=== Terraform ==="
+                    terraform version
+                    echo "=== Git ==="
+                    git --version
+                    echo "=== Required Files ==="
+                    test -f terraform/main.tf
+                    test -f terraform/versions.tf
+                    test -f terraform/variables.tf
+                    test -f terraform/outputs.tf
+                '''
+            }
+        }
+
+        stage('Terraform Format Check') {
+            steps {
+                sh 'terraform -chdir=terraform fmt -check -recursive'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                sh 'terraform -chdir=terraform init -backend=false -input=false'
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                sh 'terraform -chdir=terraform validate'
+            }
+        }
+
+        stage('Git Diff Check') {
+            steps {
+                sh 'git diff --check'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Infrastructure validation pipeline completed successfully.'
+        }
+
+        failure {
+            echo 'Infrastructure pipeline failed. Review the stage logs.'
+        }
+    }
+}
