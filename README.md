@@ -1061,60 +1061,6 @@ The troubleshooting record should capture:
 
 Only verified results should be marked as resolved.
 
-### Jenkins Workspace Permissions
-
-The Maven build runs inside a Docker container with the application directory bind-mounted from the Jenkins workspace. Build artifacts created with root ownership can cause permission errors in subsequent Jenkins steps.
-
-The pipeline includes a shell `trap` intended to restore ownership of the Maven `target` directory to UID `105` and GID `108` when the container process exits.
-
-The fix was followed by a successful pipeline execution. The captured evidence documents the successful build workflow, image publishing, and GitOps values update. Further consecutive builds should be used to confirm repeatability and ensure that workspace cleanup continues to work as expected.
-
-### GitOps Values Push Failures
-
-If the values-update stage fails:
-
-1. Confirm that the Jenkins credential ID `github` exists and is available to the job.
-2. Confirm that its token has permission to write repository contents.
-3. Check whether the workspace is checked out on the intended branch.
-4. Inspect the Git push error and remote branch state.
-5. Confirm that the expected image tag can be updated in `helm/values.yaml`.
-6. Resolve branch divergence safely; do not use a force push as a routine fix.
-
-A successful Docker image push does not mean that the GitOps values update succeeded. Review the Jenkins stage results separately.
-
-### Argo CD Sync and Health
-
-If the Helm values are updated in Git but the Application does not become synchronized or healthy, inspect:
-
-- The Argo CD Application source repository, branch, and path.
-- The sync policy and Application conditions.
-- The desired image tag in `helm/values.yaml`.
-- The rendered Helm resources.
-- The image pull status and container logs.
-- The status of the database Secret and persistent volume.
-- Kubernetes events for the affected resources.
-
-Troubleshooting evidence should be added to the `troubleshooting/` directory when new issues are encountered.
-
-### Rolling Update Behavior
-
-When a new Pod appears while an old Pod is still running, this can be normal Deployment rolling-update behavior.
-
-The Deployment controller attempts to replace Pods gradually according to the rollout strategy and readiness status. The exact number of simultaneously running Pods depends on the Deployment strategy, `maxSurge`, `maxUnavailable`, available resources, and readiness of the new Pods.
-
-Argo CD reconciles the desired configuration; it does not directly manage the individual Pod replacement sequence.
-
-Verify the rollout using:
-
-```bash
-kubectl rollout status deployment/spring-petclinic -n petclinic
-kubectl get deployment spring-petclinic -n petclinic
-kubectl get pods -n petclinic -o wide
-kubectl describe deployment spring-petclinic -n petclinic
-```
-
-Do not assume a rollout is complete merely because Argo CD reports that synchronization has started. Confirm the Deployment and Pod status.
-
 ## Future Improvements
 
 Potential future enhancements include:
