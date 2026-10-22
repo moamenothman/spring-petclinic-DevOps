@@ -1,0 +1,14 @@
+---
+- name: Create application management directory
+  ansible.builtin.file:
+    path: "{{ managed_directory }}"
+    state: directory
+    mode: "0755"
+
+- name: Create Ansible managed marker file
+  ansible.builtin.copy:
+    content: |
+      This file is managed by Ansible.
+      Project: Spring PetClinic DevOps
+    dest: "{{ managed_file }}"
+    mode: "0644"

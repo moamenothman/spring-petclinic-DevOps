@@ -1,0 +1,3 @@
+---
+managed_directory: /opt/spring-petclinic
+managed_file: /opt/spring-petclinic/managed-by-ansible.txt

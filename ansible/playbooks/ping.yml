@@ -1,0 +1,8 @@
+---
+- name: Verify Ansible connectivity
+  hosts: local
+  gather_facts: false
+
+  tasks:
+    - name: Verify managed host is reachable
+      ansible.builtin.ping:

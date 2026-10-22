@@ -1,0 +1,8 @@
+---
+- name: Configure local system
+  hosts: local
+  become: true
+  gather_facts: false
+
+  roles:
+    - common
