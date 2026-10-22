@@ -58,6 +58,18 @@ pipeline {
             }
         }
 
+        stage('Terraform Security Scan') {
+            steps {
+                sh '''
+                    /home/infra-agent/venvs/checkov/bin/checkov \
+                        -d terraform \
+                        --framework terraform \
+                        --compact \
+                        --soft-fail
+                '''
+            }
+        }
+
         stage('Git Diff Check') {
             steps {
                 sh 'git diff --check'
