@@ -22,7 +22,7 @@ and Argo CD.
 -   [Technology Stack](#technology-stack)
 -   [Infrastructure as Code and
     Ansible](#infrastructure-as-code-and-ansible)
--   [Monitoring & Observability](#Monitoring-&-Observability)
+-   [Monitoring and Observability](#Monitoring-and-Observability)
 -   [Repository Structure](#repository-structure)
 -   [CI/CD Pipeline](#cicd-pipeline)
 -   [Automated GitOps Image Updates](#automated-gitops-image-updates)
@@ -641,7 +641,7 @@ been integrated into the Jenkins pipeline, and it does not configure a
 remote server or AWS instance. Jenkins integration and a remote-host
 inventory are future steps.
 
-## Monitoring & Observability
+## Monitoring and Observability
 
 The project implements an application monitoring and observability stack using **Spring Boot Actuator, Prometheus, and Grafana** to collect, query, visualize, and monitor application metrics.
 
