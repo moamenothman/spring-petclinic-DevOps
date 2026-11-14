@@ -22,8 +22,7 @@ and Argo CD.
 -   [Technology Stack](#technology-stack)
 -   [Infrastructure as Code and
     Ansible](#infrastructure-as-code-and-ansible)
--   [Monitoring with Prometheus and
-    Grafana](#Monitoring & Observability)
+-   [Monitoring with Prometheus and Grafana](#Monitoring-&-Observability)
 -   [Repository Structure](#repository-structure)
 -   [CI/CD Pipeline](#cicd-pipeline)
 -   [Automated GitOps Image Updates](#automated-gitops-image-updates)
