@@ -23,7 +23,7 @@ and Argo CD.
 -   [Infrastructure as Code and
     Ansible](#infrastructure-as-code-and-ansible)
 -   [Monitoring with Prometheus and
-    Grafana](#monitoring-with-prometheus-and-grafana)
+    Grafana](#Monitoring & Observability)
 -   [Repository Structure](#repository-structure)
 -   [CI/CD Pipeline](#cicd-pipeline)
 -   [Automated GitOps Image Updates](#automated-gitops-image-updates)
