@@ -642,45 +642,101 @@ been integrated into the Jenkins pipeline, and it does not configure a
 remote server or AWS instance. Jenkins integration and a remote-host
 inventory are future steps.
 
-## Monitoring with Prometheus and Grafana
+## Monitoring, Observability and SRE with Prometheus and Grafana
 
-The `monitoring/` directory contains Helm values for
-`kube-prometheus-stack` and a custom Grafana dashboard configuration for
-Spring PetClinic.
+The project includes a monitoring stack based on **Prometheus and Grafana**, deployed using the `kube-prometheus-stack` Helm chart in the Kubernetes `monitoring` namespace.
 
-The monitoring stack was installed into the local Kubernetes cluster in
-the `monitoring` namespace. Grafana and Prometheus are exposed
-internally through Kubernetes Services; Grafana's API health and
-authenticated organization endpoint returned HTTP 200 during validation.
-A custom dashboard ConfigMap is present, and screenshots document the
-dashboard along with CPU and memory queries.
+Prometheus collects application and Kubernetes metrics, while Grafana provides dashboards for monitoring Spring PetClinic's application performance, availability, traffic, and infrastructure resources.
+
+### Application Monitoring Dashboard
+
+A custom Grafana dashboard was developed for Spring PetClinic to provide visibility into application-level metrics, including:
+
+- **Availability:** Tracks the proportion of successful HTTP requests.
+- **Average Request Latency:** Measures the average HTTP response time.
+- **Total Requests:** Tracks the total number of HTTP requests over a selected time range.
+- **Requests per Minute (RPM):** Measures the application's incoming request rate.
+- **Latency Monitoring:** Provides visibility into application response-time behavior over different time ranges.
+
+The dashboard supports monitoring over different time windows, including weekly and monthly views, helping analyze service behavior and identify performance changes.
+
+**Updated Dashboard Evidence:**
+
+![Upgraded Grafana PetClinic Dashboard - Part 1](screenshots/upgraded-dashboard1.png)
+
+![Upgraded Grafana PetClinic Dashboard - Part 2](screenshots/upgraded-dashboard2.png)
+
+### SLI, SLO and SLA Concepts
+
+The monitoring implementation also demonstrates practical understanding of **Service Level Indicators (SLIs), Service Level Objectives (SLOs), and Service Level Agreements (SLAs)**.
+
+These concepts are related but serve different purposes:
+
+- **SLI (Service Level Indicator):** A measurable indicator of service reliability or performance. In this project, availability and request latency are used as application-level indicators.
+- **SLO (Service Level Objective):** A target defined for an SLI over a specified measurement window. For example, an availability objective of 99%.
+- **SLA (Service Level Agreement):** A formal agreement between a service provider and its customer that defines expected service levels and may include consequences or service credits when commitments are not met.
+
+The project uses monitoring metrics to evaluate service behavior against defined objectives. The 99% availability threshold is used as an example operational objective, not as a contractual SLA or a production uptime guarantee.
+
+### Grafana Alerting
+
+Grafana Alerting was configured to monitor application availability and detect when it falls below the defined threshold.
+
+An availability alert rule was created using the Prometheus metrics collected from Spring Boot Actuator.
+
+The alert evaluates the application's availability against a **99% threshold**, providing an operational notification when the measured availability drops below the configured objective.
+
+This demonstrates the practical relationship between monitoring and SLOs: metrics provide the SLIs, objectives establish acceptable service levels, and alert rules help identify when service reliability deteriorates.
+
+**Availability Alert Evidence:**
+
+![Grafana Availability Alert - Below 99 Percent](screenshots/alert-availability-less-than-99.png)
+
+![Grafana Availability Alert - Additional Configuration Evidence](screenshots/alert-availability-less-than-99-2.png)
+
+### Kubernetes Resource Monitoring
+
+In addition to application-level monitoring, the dashboard includes Kubernetes infrastructure metrics to help investigate resource-related performance issues.
+
+The monitoring setup includes:
+
+- CPU utilization.
+- Container memory consumption.
+- Resource usage at the Pod level.
+
+These metrics help correlate application behavior with the resource consumption of its Kubernetes workloads.
+
+### Monitoring Architecture and Configuration
+
+The monitoring stack is configured through Helm values and deployed into the local Kubernetes cluster.
+
+Grafana and Prometheus are exposed internally through Kubernetes Services. During validation, Grafana's API health endpoint and authenticated organization endpoint returned HTTP 200.
+
+A custom Grafana dashboard ConfigMap is also maintained in the repository.
 
 Relevant files:
 
--   [`monitoring/values.yaml`](monitoring/values.yaml) --- Helm values
-    for the monitoring stack.
--   [`monitoring/grafana/dashboards/petclinic-dashboard.json`](monitoring/grafana/dashboards/petclinic-dashboard.json)
-    --- dashboard definition.
--   [`monitoring/grafana/dashboards/petclinic-dashboard-configmap.yaml`](monitoring/grafana/dashboards/petclinic-dashboard-configmap.yaml)
-    --- dashboard ConfigMap manifest.
+- [`monitoring/values.yaml`](monitoring/values.yaml) — Helm values for the monitoring stack.
+- [`monitoring/grafana/dashboards/petclinic-dashboard.json`](monitoring/grafana/dashboards/petclinic-dashboard.json) — Custom dashboard definition.
+- [`monitoring/grafana/dashboards/petclinic-dashboard-configmap.yaml`](monitoring/grafana/dashboards/petclinic-dashboard-configmap.yaml) — Dashboard ConfigMap manifest.
 
-Evidence:
+### Previous Monitoring Evidence
 
-![Grafana PetClinic dashboard --- part
-1](screenshots/grafana-dashboard-part1.png)
+The following screenshots document the earlier dashboard version and the initial CPU and memory monitoring queries.
 
-![Grafana PetClinic dashboard --- part
-2](screenshots/grafana-dashboard-part2.png)
+![Previous Grafana PetClinic Dashboard - Part 1](screenshots/grafana-dashboard-part1.png)
 
-![Grafana CPU query](screenshots/grafana-cpu-query.png)
+![Previous Grafana PetClinic Dashboard - Part 2](screenshots/grafana-dashboard-part2.png)
 
-![Grafana memory query](screenshots/grafana-memory-query.png)
+![Grafana CPU Monitoring Query](screenshots/grafana-cpu-query.png)
 
-The screenshots reflect the captured local-cluster state, not a
-production monitoring deployment or an uptime/SLA guarantee. The
-monitoring stack is configured through Helm values, but the repository
-does not currently show an Argo CD Application dedicated to managing the
-monitoring release.
+![Grafana Memory Monitoring Query](screenshots/grafana-memory-query.png)
+
+### Implementation Scope and Limitations
+
+The monitoring stack was validated in a local Kubernetes environment. The screenshots represent captured project states and do not imply a production-grade monitoring deployment or guaranteed service availability.
+
+The repository currently includes Helm-based monitoring configuration, a custom dashboard, and Grafana availability alerting. The monitoring Helm release is not currently managed through a dedicated Argo CD Application.
 
 ## Docker
 
